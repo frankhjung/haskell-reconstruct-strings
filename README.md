@@ -87,8 +87,10 @@ sequenceDiagram
   Hspec and QuickCheck test suite.
 * [`docs/reconstructing-complete-dna-strand-from-short-fragments.md`][dna-doc]:
   Background information on DNA sequencing and assembly.
-* [`docs/REQ-001-functional-greedy-overlap-assembler.md`][spec-doc]:
+* [`docs/REQ-001-functional-greedy-overlap-assembler.md`][req-001]:
   Formal functional specification and architectural decision records (ADRs).
+* [`docs/REQ-002-shell-script-to-make-strands.md`][req-002]:
+  Requirements and ADRs for the synthetic strand generator script.
 * [`docs/GLOSSARY.md`][glossary]:
   Domain terminology and definitions.
 
@@ -134,6 +136,41 @@ ATGGCGTGCA
 * `-f`, `--file FILE`: Read fragments from a file (one read per line).
 * `READ...`: Read fragments passed as positional arguments or piped via `stdin`.
 
+### Generating Synthetic Reads
+
+You can generate synthetic simulated reads (strands) from a contiguous text file
+using the included shell script:
+
+```bash
+./scripts/make-strands.sh --input reference.txt --min 10 --max 50 --count 100 > reads.txt
+```
+
+#### Create Synthetic Data
+
+```bash
+cat /dev/urandom | tr -dc 'ATGC' | fold -w 64 | head -n 10 > sample.txt
+```
+
+#### Split into Strands
+
+```bash
+scripts/make-strands.sh -i sample.txt -m 8 -M 60 -n 1000 > strands.txt
+```
+
+#### Reassemble Strands
+
+```bash
+cabal run reconstruct-strings -- -m 4 -f strands.txt 2>/dev/null | fold -w 64 > reconstructed.txt
+```
+
+#### Compare Expected versus Assembled
+
+```bash
+sdiff -s sample.txt reconstructed.txt
+```
+
+###
+
 ## Continuous Integration
 
 GitHub Actions pipeline configuration is defined in
@@ -143,7 +180,8 @@ and pull requests.
 
 ## References
 
-* [Functional Greedy Overlap Assembler Specification][spec-doc]
+* [REQ-001 Functional Greedy Overlap Assembler Specification][req-001]
+* [REQ-002 Create Text Strands][req-002]
 * [Reconstructing DNA from Short Fragments][dna-doc]
 * [Domain Glossary][glossary]
 
@@ -154,8 +192,9 @@ and pull requests.
 [github-actions]: .github/workflows/haskell.yml
 [glossary]: docs/GLOSSARY.md
 [makefile]: Makefile
-[spec-doc]: docs/REQ-001-functional-greedy-overlap-assembler.md
-[src-assembler]: src/Assembler.hs
+[req-001]: docs/REQ-001-functional-greedy-overlap-assembler.md
+[req-002]: docs/REQ-002-shell-script-to-make-strands.md
 [src-assembler-types]: src/Assembler/Types.hs
+[src-assembler]: src/Assembler.hs
 [test-assembler-spec]: test/AssemblerSpec.hs
 [test-spec]: test/Spec.hs

@@ -21,6 +21,7 @@ public
 *.swp
 tags
 *.tix
+*.txt
 .trunk
 .vscode
 .antigravitycli

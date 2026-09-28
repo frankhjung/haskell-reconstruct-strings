@@ -38,3 +38,10 @@ A finite, immutable sequence of characters representing a single fragment of
 sequenced genetic material, distinct from an assembled Contig.
 
 _Avoid_: Fragment, K-mer
+
+## Strand
+
+An independent random substring sampled from a contiguous block of text. Within
+the context of this project, a "Strand" is synonymous with a simulated "Read".
+
+_Avoid_: Partition
