@@ -2,7 +2,6 @@
 
 .DEFAULT_GOAL	:= default
 
-GHC_VERSION	:= 9.6.7
 TARGET		:= reconstruct-strings
 CABAL		:= $(TARGET).cabal
 SRCS		:= $(wildcard app/*.hs src/*.hs src/**/*.hs test/*.hs)

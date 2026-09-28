@@ -17,12 +17,13 @@ module Assembler
   , sortCanonical
   ) where
 
-import           Assembler.Types (AssemblyError (..), Contig (..),
-                                  OverlapCandidate (..), OverlapLength,
-                                  Read (..))
-import           Data.List       (foldl', nub, sortBy)
-import qualified Data.Text       as T
-import           Prelude         hiding (Read, reads)
+import           Assembler.Types           (AssemblyError (..), Contig (..),
+                                            OverlapCandidate (..),
+                                            OverlapLength, Read (..))
+import           Data.Containers.ListUtils (nubOrd)
+import           Data.List                 (foldl', sortBy)
+import qualified Data.Text                 as T
+import           Prelude                   hiding (Read, reads)
 
 -- | Reconstruct contigs from a collection of reads given a minimum overlap.
 --
@@ -45,9 +46,9 @@ assemble inputReads minOverlap
 -- | Recursively reduce the candidate pool by greedily merging the best
 -- overlap pair and eliminating dynamically contained reads.
 reducePool :: [Read] -> Int -> [Read]
-reducePool pool minOverlap
-  | length pool <= 1 = pool
-  | otherwise =
+reducePool [] _ = []
+reducePool [sole] _ = [sole]
+reducePool pool minOverlap =
       case findBestOverlap pool minOverlap of
         Nothing -> pool
         Just candidate ->
@@ -64,14 +65,17 @@ reducePool pool minOverlap
 --
 -- Returns 0 if no match meeting or exceeding @minOverlap@ is found, or if
 -- the match length equals or exceeds the length of the longer read.
+--
+-- >>> calculateOverlap (Read "ATGGC") (Read "GGCGT") 2
+-- 3
 calculateOverlap :: Read -> Read -> Int -> OverlapLength
 calculateOverlap (Read r1) (Read r2) minOverlap =
   let maxPossible = min (T.length r1) (T.length r2)
       candidates  =
         [ len
-        | len <- [maxPossible, maxPossible - 1 .. minOverlap]
-        , T.takeEnd len r1 == T.take len r2
-        , len < max (T.length r1) (T.length r2)
+        | len <- [maxPossible, maxPossible - 1 .. minOverlap] -- desc lengths
+        , T.takeEnd len r1 == T.take len r2 -- test end of r1 with start of r2
+        , len < max (T.length r1) (T.length r2) -- proper overlap; not identical
         ]
   in case candidates of
        (best : _) -> best
@@ -126,7 +130,7 @@ findBestOverlap pool minOverlap =
 -- substrings inside longer reads.
 filterContainedReads :: [Read] -> [Read]
 filterContainedReads rawReads =
-  let uniqueReads = nub rawReads
+  let uniqueReads = nubOrd rawReads
   in [ r
      | r <- uniqueReads
      , not (any (\other -> r /= other && unRead r `T.isInfixOf` unRead other)

@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-orphans #-}
 -- |
 -- Module      : AssemblerSpec
 -- Description : Unit and property tests for greedy overlap assembler
@@ -13,9 +14,13 @@ module AssemblerSpec (spec) where
 import           Assembler       (assemble, calculateOverlap,
                                   filterContainedReads, mergePair)
 import           Assembler.Types (AssemblyError (..), Contig (..), Read (..))
+import qualified Data.Text       as T
 import           Prelude         hiding (Read)
 import           Test.Hspec      (Spec, describe, it, shouldBe)
-import           Test.QuickCheck (property)
+import           Test.QuickCheck (Arbitrary (..), elements, listOf, property)
+
+instance Arbitrary Read where
+  arbitrary = Read . T.pack <$> listOf (elements "ACGT")
 
 spec :: Spec
 spec = do
@@ -83,3 +88,12 @@ spec = do
         if k < 1
           then assemble [Read "ACGT"] k == Left (InvalidMinOverlap k)
           else assemble [Read "ACGT"] k == Right [Contig "ACGT"]
+
+    it "is permutation invariant (reverse)" $
+      property $ \rs k ->
+        let k' = max 1 k
+         in assemble (reverse rs) k' == assemble rs k'
+
+    it "exhibits idempotence of containment filtering" $
+      property $ \rs ->
+        filterContainedReads (filterContainedReads rs) == filterContainedReads rs

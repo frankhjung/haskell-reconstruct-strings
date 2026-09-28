@@ -22,6 +22,51 @@ reduction algorithm that:
 * Terminates when no pairwise overlap satisfies the minimum threshold.
 * Sorts final contigs into a canonical, permutation-invariant order.
 
+## Algorithm Workflow
+
+The following sequence diagram illustrates the core assembly
+pipeline. After validating inputs, `assemble` filters contained
+reads, then enters a recursive reduction loop that greedily merges
+the best overlapping pair and re-filters the pool until no further
+merges are possible. The surviving reads are converted to contigs
+and sorted into canonical order.
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant A as assemble
+    participant FCR as filterContainedReads
+    participant RP as reducePool
+    participant FBO as findBestOverlap
+    participant MP as mergePair
+    participant SC as sortCanonical
+
+    C->>A: assemble reads minOverlap
+    alt minOverlap < 1 or empty reads
+        A-->>C: Left AssemblyError
+    else valid input
+        A->>FCR: filterContainedReads inputReads
+        FCR-->>A: initialPool
+        A->>RP: reducePool initialPool minOverlap
+        loop until pool size <= 1 or no overlaps
+            RP->>FBO: findBestOverlap pool minOverlap
+            alt best candidate found
+                FBO-->>RP: Just candidate
+                RP->>MP: mergePair prefix suffix length
+                MP-->>RP: mergedRead
+                RP->>FCR: filterContainedReads (mergedRead : remaining)
+                FCR-->>RP: updatedPool
+            else no candidate found
+                FBO-->>RP: Nothing
+            end
+        end
+        RP-->>A: finalPool
+        A->>SC: sortCanonical contigs
+        SC-->>A: sortedContigs
+        A-->>C: Right sortedContigs
+    end
+```
+
 ## Project Structure
 
 * [`reconstruct-strings.cabal`][cabal-file]:
@@ -40,7 +85,9 @@ reduction algorithm that:
   Test driver with `hspec-discover`.
 * [`test/AssemblerSpec.hs`][test-assembler-spec]:
   Hspec and QuickCheck test suite.
-* [`docs/FunctionalGreedyOverlapAssemblerSpecification.md`][spec-doc]:
+* [`docs/reconstructing-complete-dna-strand-from-short-fragments.md`][dna-doc]:
+  Background information on DNA sequencing and assembly.
+* [`docs/REQ-001-functional-greedy-overlap-assembler.md`][spec-doc]:
   Formal functional specification and architectural decision records (ADRs).
 * [`docs/GLOSSARY.md`][glossary]:
   Domain terminology and definitions.
@@ -103,11 +150,11 @@ and pull requests.
 [app-main]: app/Main.hs
 [cabal-file]: reconstruct-strings.cabal
 [cabal-url]: https://www.haskell.org/cabal/
-[dna-doc]: docs/ReconstructingCompleteDNAStrandFromShortFragments.md
+[dna-doc]: docs/reconstructing-complete-dna-strand-from-short-fragments.md
 [github-actions]: .github/workflows/haskell.yml
 [glossary]: docs/GLOSSARY.md
 [makefile]: Makefile
-[spec-doc]: docs/FunctionalGreedyOverlapAssemblerSpecification.md
+[spec-doc]: docs/REQ-001-functional-greedy-overlap-assembler.md
 [src-assembler]: src/Assembler.hs
 [src-assembler-types]: src/Assembler/Types.hs
 [test-assembler-spec]: test/AssemblerSpec.hs

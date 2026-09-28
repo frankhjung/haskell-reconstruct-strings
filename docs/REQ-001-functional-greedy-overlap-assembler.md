@@ -315,14 +315,14 @@ initial filtered pool of `N` reads, reduction executes at most `N - 1` merges.
 
 For `N` reads of average length `L`:
 
-- Pairwise overlap evaluation takes `O(N^2 * L)`.
-- At most `N - 1` reduction stages occur.
-- Worst-case runtime of naive reduction is `O(N^3 * L)`.
+- Pairwise overlap evaluation takes $O(N^2 \cdot L)$$.
+- At most $N - 1$ reduction stages occur.
+- Worst-case runtime of naive reduction is $O(N^3 \cdot L)$.
 
 ### 7.3 Space Complexity
 
 Because Haskell is non-strict by default, strict evaluation of contig text and
-accumulator lists prevents space leaks. The memory footprint is `O(N * L)`.
+accumulator lists prevents space leaks. The memory footprint is $O(N \cdot L)$.
 
 ### 7.4 Invariants
 
