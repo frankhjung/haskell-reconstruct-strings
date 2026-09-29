@@ -25,8 +25,8 @@ jobs:
       - name: Setup Haskell GHC and Cabal
         uses: haskell-actions/setup@v2
         with:
-          ghc-version: '9.6.7'
-          cabal-version: 'latest'
+          ghc-version: "9.6.7"
+          cabal-version: "latest"
 
       - name: Cache Cabal store and build artifacts
         uses: actions/cache@v4
@@ -58,10 +58,3 @@ jobs:
         run: |
           cabal run reconstruct-strings -- -m 2 ATGGC GGCGT CGTGCA
           cabal run reconstruct-strings -- -m 2 ABC BCD CDE
-
-      - name: Generate Haddock documentation
-        run: |
-          cabal haddock \
-            --haddock-executables \
-            --haddock-quickjump \
-            --haddock-hyperlink-sources
