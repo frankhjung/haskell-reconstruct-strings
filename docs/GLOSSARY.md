@@ -7,41 +7,44 @@ such as specifying a minimum overlap threshold less than one.
 
 ## Candidate
 
-An ordered pair of distinct reads that shares a valid suffix-prefix match
+An ordered pair of distinct fragments that shares a valid suffix-prefix match
 exceeding or meeting the minimum overlap threshold. Not the same as an arbitrary
-pair of reads.
+pair of fragments.
 
 _Avoid_: Match
 
 ## Containment
 
-The condition where a read is a proper substring of another sequence, rendering
-the shorter read redundant as it contributes no novel information.
+The condition where a fragment is a proper substring of another sequence,
+rendering the shorter fragment redundant as it contributes no novel information.
 
 ## Contig
 
-A contiguous sequence produced by iteratively merging overlapping reads, or an
-isolated singleton read that could not be merged. Distinct from a raw Read.
+A contiguous sequence produced by iteratively merging overlapping fragments, or
+an isolated singleton fragment that could not be merged. Distinct from a raw
+Fragment.
 
 _Avoid_: Scaffold
 
 ## Overlap
 
-An exact match where a suffix of a prefix read is identical to a prefix of a
-suffix read, strictly shorter than the longer read and meeting the threshold.
+An exact match where a suffix of a prefix fragment is identical to a prefix of a
+suffix fragment, strictly shorter than the longer fragment and meeting the
+threshold.
 
 _Avoid_: Alignment
 
-## Read
+## Fragment
 
-A finite, immutable sequence of characters representing a single fragment of
-sequenced genetic material, distinct from an assembled Contig.
+A finite, immutable sequence of characters representing a single string segment
+of sequenced genetic material, distinct from an assembled Contig.
 
-_Avoid_: Fragment, K-mer
+_Avoid_: Read, K-mer
 
 ## Strand
 
 An independent random substring sampled from a contiguous block of text. Within
-the context of this project, a "Strand" is synonymous with a simulated "Read".
+the context of this project, a "Strand" is synonymous with a simulated
+"Fragment".
 
 _Avoid_: Partition

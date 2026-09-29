@@ -2,11 +2,11 @@
 
 A pure, total Haskell implementation of a greedy overlap sequence assembler
 designed to reconstruct contiguous sequences (*contigs*) from short overlapping
-string fragments or DNA sequencing reads.
+string fragments or DNA sequencing fragments.
 
 ## Overview
 
-Reconstructing a DNA sequence from short read fragments—a foundational step in
+Reconstructing a DNA sequence from short fragments—a foundational step in
 *de novo* genome assembly—can be approximated through the Overlap-Layout-
 Consensus (OLC) paradigm.
 
@@ -14,20 +14,20 @@ This project implements a deterministic, pure functional greedy overlap
 reduction algorithm that:
 
 - Validates input parameters totally without partial runtime exceptions.
-- Deduplicates identical reads to a single representative sequence.
-- Eliminates reads contained as proper substrings within longer reads.
+- Deduplicates identical fragments to a single representative sequence.
+- Eliminates fragments contained as proper substrings within longer fragments.
 - Merges the candidate pair with the longest valid suffix-prefix match.
 - Resolves ties deterministically using a strict three-tier total order.
-- Dynamically purges reads engulfed by newly formed composite contigs.
+- Dynamically purges fragments engulfed by newly formed composite contigs.
 - Terminates when no pairwise overlap satisfies the minimum threshold.
 - Sorts final contigs into a canonical, permutation-invariant order.
 
 ## Algorithm Workflow
 
 The following sequence diagram illustrates the core assembly pipeline. After
-validating inputs, `assemble` filters contained reads, then enters a recursive
+validating inputs, `assemble` filters contained fragments, then enters a recursive
 reduction loop that greedily merges the best overlapping pair and re-filters the
-pool until no further merges are possible. The surviving reads are converted to
+pool until no further merges are possible. The surviving fragments are converted to
 contigs and sorted into canonical order.
 
 ```mermaid
@@ -40,8 +40,8 @@ sequenceDiagram
     participant MP as mergePair
     participant SC as sortCanonical
 
-    C->>A: assemble reads minOverlap
-    alt minOverlap < 1 or empty reads
+    C->>A: assemble fragments minOverlap
+    alt minOverlap < 1 or empty fragments
         A-->>C: Left AssemblyError
     else valid input
         A->>FCR: filterContainedReads inputReads
@@ -85,17 +85,17 @@ ATGGCGTGCA
 ### Options
 
 - `-m`, `--min-overlap INT`: Minimum overlap threshold (default: `2`).
-- `-f`, `--file FILE`: Read fragments from a file (one read per line).
-- `READ...`: Read fragments passed as positional arguments or piped via `stdin`.
+- `-f`, `--file FILE`: Read fragments from a file (one fragment per line).
+- `FRAGMENT...`: Read fragments passed as positional arguments or piped via `stdin`.
 
-### Generating Synthetic Reads
+### Generating Synthetic Fragments
 
-You can generate synthetic reads (strands) from a contiguous text file using the
+You can generate synthetic fragments (strands) from a contiguous text file using the
 included shell script:
 
 ```bash
-./scripts/make-strands.sh \
-  --input reference.txt --min 10 --max 50 --count 100 > reads.txt
+./scripts/make-strands.sh --input reference.txt --min 10 --max 50 --count 100 \
+      > fragments.txt
 ```
 
 ### End-to-End Simulation Pipeline
@@ -106,20 +106,22 @@ generation and reassembly pipeline:
 1. Create synthetic reference data:
 
    ```bash
-   cat /dev/urandom | tr -dc 'ATGC' | fold -w 64 | head -n 10 > sample.txt
+   cat /dev/urandom | tr -dc 'ATGC' | fold -w 64 | head -n 10 \
+      > sample.txt
    ```
 
-2. Fragment the reference sequence into reads:
+2. Fragment the reference sequence into fragments:
 
    ```bash
-   ./scripts/make-strands.sh -i sample.txt -m 8 -M 60 -n 1000 > strands.txt
+   ./scripts/make-strands.sh -i sample.txt -m 8 -M 60 -n 1000 \
+      > strands.txt
    ```
 
 3. Reassemble the fragmented strands:
 
    ```bash
    cabal run reconstruct-strings -- -m 4 -f strands.txt 2>/dev/null \
-     | fold -w 64 > reconstructed.txt
+      | fold -w 64 > reconstructed.txt
    ```
 
 4. Compare expected versus assembled sequences:
@@ -155,7 +157,7 @@ The project uses [Cabal][cabal-url] and a `Makefile` task runner.
   linting, building, testing, and documentation generation.
 - [`src/Assembler.hs`][src-assembler]: Core greedy reduction logic and
   containment filtering.
-- [`src/Assembler/Types.hs`][src-assembler-types]: Domain newtypes (`Read`,
+- [`src/Assembler/Types.hs`][src-assembler-types]: Domain newtypes (`Fragment`,
   `Contig`), candidate records, and error types.
 - [`app/Main.hs`][app-main]: Command-line interface with option parsing.
 - [`test/Spec.hs`][test-spec]: Test driver with `hspec-discover`.
@@ -185,26 +187,26 @@ Comparing a 4-character nucleotide alphabet (`ATGC`) with a 26-character
 alphabet (`A-Z`):
 
 - **$k = 2$**:
-  - `ATGC`: $(1/4)^2 = 1/16 = 6.25\%$
-  - `A-Z`: $(1/26)^2 = 1/676 \approx 0.148\%$ ($\approx 42\times$ rarer)
+  - `ATGC`: $(\frac{1}{4})^2 = \frac{1}{16}$ = 6.25%
+  - `A-Z`: $(\frac{1}{26})^2 = \frac{1}{676}$ ~ 0.148% ($\approx 42\times$ rarer)
 - **$k = 3$**:
-  - `ATGC`: $(1/4)^3 = 1/64 \approx 1.56\%$
-  - `A-Z`: $(1/26)^3 \approx 0.0057\%$ ($\approx 274\times$ rarer)
+  - `ATGC`: $(\frac{1}{4})^3 = \frac{1}{64}$ ~ 1.56%
+  - `A-Z`: $(\frac{1}{26})^3$ ~ 0.0057% ($\approx 274\times$ rarer)
 - **$k = 4$**:
-  - `ATGC`: $(1/4)^4 = 1/256 \approx 0.391\%$
-  - `A-Z`: $(1/26)^4 \approx 0.000219\%$ ($\approx 1{,}785\times$ rarer)
+  - `ATGC`: $(\frac{1}{4})^4 = \frac{1}{256}$ ~ 0.391%
+  - `A-Z`: $(\frac{1}{26})^4$ ~ 0.000219% ($\approx 1{,}785 \times$ rarer)
 
 ### Impact on Assembly Behaviour
 
-- **Unrelated Random Noise**: When assembling random reads without a shared
-  reference sequence, `ATGC` collapses reads into spurious contigs due to
-  frequent coincidental matches. Conversely, `A-Z` reads rarely share accidental
-  overlaps, causing the greedy reduction in [`Assembler.hs`][src-assembler] to
-  halt immediately without merges. The apparent assembly of small alphabets is
-  an illusion caused by chimeric joins.
+- **Unrelated Random Noise**: When assembling random fragments without a shared
+  reference sequence, `ATGC` collapses fragments into spurious contigs due to
+  frequent coincidental matches. Conversely, `A-Z` fragments rarely share
+  accidental overlaps, causing the greedy reduction in [`Assembler.hs`]
+  [src-assembler] to halt immediately without merges. The apparent assembly of
+  small alphabets is an illusion caused by chimeric joins.
 - **Sensitivity to Coverage Gaps**: Over `A-Z`, 4-mers are statistically
   unique ($1$ in $456{,}976$). If physical coverage has a gap where adjacent
-  reads overlap by less than $m$, the assembler halts and outputs fragmented
+  fragments overlap by less than $m$, the assembler halts and outputs fragmented
   contigs. In `ATGC`, chance 4-mer matches across distant regions can falsely
   bridge coverage gaps, resulting in scrambled assemblies.
 - **Repeat Ambiguity**: In `ATGC`, short sequences rapidly exhaust unique
@@ -214,8 +216,8 @@ alphabet (`A-Z`):
 
 ### Minimum Overlap Lower Bound
 
-For a pool of $N$ reads, there are $N(N - 1)$ ordered pairwise comparisons in
-[`findBestOverlap`][src-assembler]. To ensure the expected number of false
+For a pool of $N$ fragments, there are $N(N - 1)$ ordered pairwise comparisons
+in [`findBestOverlap`][src-assembler]. To ensure the expected number of false
 positive pairwise matches across the dataset is less than 1:
 
 $$E[\text{spurious pairs}] \approx N^2 \cdot |\Sigma|^{-m} < 1$$
@@ -255,59 +257,58 @@ fragmentation into separate contigs.
 - **Minimum Overlap ($m$)**:
   - Set $m = \max\left(\lceil 2 \log_{|\Sigma|} N \rceil, \; 0.3 \cdot
     \bar{L}\right)$.
-  - Typical range: **30%** to **50%** of average fragment length $\bar{L}$.
+  - Typical range: 30% to 50% of average fragment length $\bar{L}$.
 - **Fragment Length ($L$)**:
   - Ensure $L > R_{\max}$ (longer than the longest repeat).
-  - Typical range: **$2\times$** to **$3\times$** the overlap threshold $m$.
+  - Typical range: $2 \times$ to $3 \times$ the overlap threshold $m$.
 - **Coverage Depth ($C$)**:
-  - Target $C_{\text{eff}} = C(1 - m/\bar{L}) \ge 10$.
-  - Nominal physical coverage: **$15\times$** to **$30\times$**.
+  - Target $C_{\text{eff}} = C(1 - \frac{m}{\bar{L}}) \ge 10$.
+  - Nominal physical coverage: $15 \times$ to $30 \times$.
 
 #### Worked Configuration Examples
 
 The following calibrated configurations illustrate parameter selection for a
 target sequence of length $G = 1{,}000$ units and $N = 1{,}000$ fragments:
 
-- **Genomic reads (`ATGC`, $|\Sigma| = 4$)**:
-  Incidental overlap collisions scale as $(1/4)^k$, requiring higher overlap
-  thresholds and longer reads to prevent false joins.
-  - Fragment length range: $20\text{--}40$ bp (mean $\bar{L} = 30$ bp).
+- **Genomic fragments (`ATGC`, $|\Sigma| = 4$)**:
+  Incidental overlap collisions scale as $(\frac{1}{4})^k$, requiring higher overlap
+  thresholds and longer fragments to prevent false joins.
+  - Fragment length range: $20 \text{--} 40$ bp (mean $\bar{L} = 30$ bp).
   - Minimum overlap: $m = 10$ bases
     ($m_{\min} = \lceil 2 \log_4 1000 \rceil = 10$,
     $E[\text{spurious}] \approx 0.95 < 1$).
-  - Coverage: nominal $C = 30\times$, effective
-    $C_{\text{eff}} = 30(1 - 10/30) = 20\times \ge 10\times$.
+  - Coverage: nominal $C = 30 \times$, effective
+    $C_{\text{eff}} = 30(1 - \frac{10}{30}) = 20 \times \ge 10 \times$.
   - Sample commands:
 
     ```bash
     ./scripts/make-strands.sh \
-      -i reference_genome.txt -m 20 -M 40 -n 1000 > reads.txt
-    cabal run reconstruct-strings -- -m 10 -f reads.txt
+      -i reference_genome.txt -m 20 -M 40 -n 1000 > fragments.txt
+    cabal run reconstruct-strings -- -m 10 -f fragments.txt
     ```
 
-- **String character reads (`A-Z`, $|\Sigma| = 26$)**:
-  Higher entropy ($(1/26)^k$) drastically reduces collision probability,
-  permitting smaller thresholds and shorter reads without chimera formation.
-  - Fragment length range: $10\text{--}20$ chars (mean $\bar{L} = 15$ chars).
+- **String character fragments (`A-Z`, $|\Sigma| = 26$)**:
+  Higher entropy ($(\frac{1}{26})^k$) drastically reduces collision probability,
+  permitting smaller thresholds and shorter fragments without chimera formation.
+  - Fragment length range: $10 \text{--}20$ chars (mean $\bar{L} = 15$ chars).
   - Minimum overlap: $m = 5$ characters
     ($m_{\min} = \lceil 2 \log_{26} 1000 \rceil = 5$,
     $E[\text{spurious}] \approx 0.084 \ll 1$).
-  - Coverage: nominal $C = 15\times$, effective
-    $C_{\text{eff}} = 15(1 - 5/15) = 10\times \ge 10\times$.
+  - Coverage: nominal $C = 15 \times$, effective
+    $C_{\text{eff}} = 15(1 - \frac{5}{15}) = 10 \times \ge 10 \times$.
   - Sample commands:
 
     ```bash
-    ./scripts/make-strands.sh \
-      -i reference_text.txt -m 10 -M 20 -n 1000 > strands.txt
+    ./scripts/make-strands.sh -i reference_text.txt -m 10 -M 20 -n 1000 > strands.txt
     cabal run reconstruct-strings -- -m 5 -f strands.txt
     ```
 
 - **Comparative summary**:
   - Alphabet size: $4$ (`ATGC`) versus $26$ (`A-Z`).
   - Overlap threshold: $m = 10$ bases versus $m = 5$ characters ($E < 1$).
-  - Fragment length: $20\text{--}40$ bp versus $10\text{--}20$ characters.
-  - Nominal coverage: $30\times$ versus $15\times$ physical depth.
-  - Effective coverage: $20\times$ versus $10\times$ Lander–Waterman depth.
+  - Fragment length: $20 \text{--}40$ bp versus $10 \text{--}20$ characters.
+  - Nominal coverage: $30 \times$ versus $15 \times$ physical depth.
+  - Effective coverage: $20 \times$ versus $10 \times$ Lander–Waterman depth.
 
 ## Continuous Integration
 

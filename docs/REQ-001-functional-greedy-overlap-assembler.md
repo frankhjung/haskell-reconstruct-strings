@@ -2,24 +2,24 @@
 
 ## 1. Overview and Problem Statement
 
-The assembler accepts an unordered collection of reads and constructs one or
-more contigs by repeatedly merging reads whose suffixes overlap prefixes. This
-is a greedy approximation of *de novo* sequence assembly designed to be
+The assembler accepts an unordered collection of fragments and constructs one or
+more contigs by repeatedly merging fragments whose suffixes overlap prefixes.
+This is a greedy approximation of *de novo* sequence assembly designed to be
 deterministic, pure, total, and mathematically rigorous.
 
 The implementation must not depend on mutable state, imperative loops, or
 in-place list modification. The algorithm is expressed as a pure functional
 reduction over immutable values in Haskell.
 
-The system produces a deterministic list of contigs from an input list of reads.
-A correct assembly is one that:
+The system produces a deterministic list of contigs from an input list of
+fragments. A correct assembly is one that:
 
 - validates input parameters totally without runtime exceptions,
-- deduplicates identical reads to a single representative,
-- removes reads that contribute no new sequence information (containment),
+- deduplicates identical fragments to a single representative,
+- removes fragments that contribute no new sequence information (containment),
 - greedily merges the candidate pair with the best valid overlap at each step,
 - resolves ties deterministically using a strict total order,
-- eliminates reads that become contained within newly merged contigs,
+- eliminates fragments that become contained within newly merged contigs,
 - stops when no valid overlap remains above the threshold,
 - and emits the remaining contigs in a canonical, permutation-invariant order.
 
@@ -51,7 +51,7 @@ The domain model is defined using Haskell newtypes and sum types over strict
 
 ```haskell
 module Assembler.Types
-  ( Read(..)
+  ( Fragment(..)
   , Contig(..)
   , OverlapLength
   , OverlapCandidate(..)
@@ -60,7 +60,7 @@ module Assembler.Types
 
 import Data.Text (Text)
 
-newtype Read = Read { unRead :: Text }
+newtype Fragment = Fragment { unFragment :: Text }
   deriving stock (Eq, Ord, Show)
 
 newtype Contig = Contig { unContig :: Text }
@@ -69,28 +69,29 @@ newtype Contig = Contig { unContig :: Text }
 type OverlapLength = Int
 
 data OverlapCandidate = OverlapCandidate
-  { prefixRead  :: !Read
-  , suffixRead  :: !Read
+  { prefixFragment  :: !Fragment
+  , suffixFragment  :: !Fragment
   , matchLength :: !OverlapLength
   }
   deriving stock (Eq, Ord, Show)
 
 data AssemblyError
   = InvalidMinOverlap !Int
-  | EmptyReadEncountered
+  | EmptyFragmentEncountered
   deriving stock (Eq, Show)
 ```
 
 ### Required Interpretation
 
-- `Read`: An immutable sequence of characters. Must be non-empty.
-- `Contig`: A contiguous sequence produced by merging overlapping reads, or an
-  unmerged singleton read.
+- `Fragment`: An immutable sequence of characters. Must be non-empty.
+- `Contig`: A contiguous sequence produced by merging overlapping fragments, or
+  an unmerged singleton fragment.
 - `OverlapLength`: A non-negative integer representing the length of an exact
   suffix-prefix match.
-- A valid overlap is an exact match where a suffix of `prefixRead` matches a
-  prefix of `suffixRead`. The overlap length must be strictly greater than zero,
-  at least `min_overlap`, and strictly less than the length of the longer read.
+- A valid overlap is an exact match where a suffix of `prefixFragment` matches a
+  prefix of `suffixFragment`. The overlap length must be strictly greater than
+  zero, at least `min_overlap`, and strictly less than the length of the longer
+  fragment.
 
 ## 4. Functional Requirements
 
@@ -98,15 +99,15 @@ data AssemblyError
 
 The entry point `assemble` accepts:
 
-- an input list of `Read` values: `[Read]`,
+- an input list of `Fragment` values: `[Fragment]`,
 - a minimum overlap threshold: `min_overlap :: Int`.
 
 #### Validation Rules
 
 - If `min_overlap < 1`, the function must return
   `Left (InvalidMinOverlap min_overlap)`.
-- If any read in the input has length 0, the function must return
-  `Left EmptyReadEncountered`.
+- If any fragment in the input has length 0, the function must return
+  `Left EmptyFragmentEncountered`.
 - The input list is treated as an unordered multiset.
 
 ### 4.2 `calculateOverlap`
@@ -128,8 +129,8 @@ If no such `k` exists, the function returns `0`.
 - The returned value is the largest valid overlap meeting the criteria, or `0`.
 
 ```haskell
-calculateOverlap :: Read -> Read -> Int -> OverlapLength
-calculateOverlap (Read r1) (Read r2) minOverlap =
+calculateOverlap :: Fragment -> Fragment -> Int -> OverlapLength
+calculateOverlap (Fragment r1) (Fragment r2) minOverlap =
   let maxPossible = min (T.length r1) (T.length r2)
       candidates =
         [ len | len <- [maxPossible, maxPossible - 1 .. minOverlap]
@@ -142,21 +143,21 @@ calculateOverlap (Read r1) (Read r2) minOverlap =
 
 ### 4.3 `mergePair`
 
-`mergePair prefix suffix overlapLen` concatenates the prefix read with the
+`mergePair prefix suffix overlapLen` concatenates the prefix fragment with the
 non-overlapping suffix remainder:
 
 ```haskell
-mergePair :: Read -> Read -> OverlapLength -> Read
-mergePair (Read p) (Read s) overlapLen =
-  Read (p <> T.drop overlapLen s)
+mergePair :: Fragment -> Fragment -> OverlapLength -> Fragment
+mergePair (Fragment p) (Fragment s) overlapLen =
+  Fragment (p <> T.drop overlapLen s)
 ```
 
 No other characters may be inserted, dropped, or modified.
 
 ### 4.4 `findBestOverlap`
 
-`findBestOverlap pool minOverlap` inspects every ordered pair of distinct reads
-`(a, b)` from `pool` where `a /= b` and computes
+`findBestOverlap pool minOverlap` inspects every ordered pair of distinct
+fragments `(a, b)` from `pool` where `a /= b` and computes
 `calculateOverlap a b minOverlap`.
 
 #### Output Contract
@@ -170,31 +171,32 @@ No other characters may be inserted, dropped, or modified.
 Candidate pairs are ordered strictly by the following total ordering:
 
 1. Greater `matchLength` takes precedence.
-2. If `matchLength` is equal, lexicographically smaller `prefixRead` takes
+2. If `matchLength` is equal, lexicographically smaller `prefixFragment` takes
    precedence.
-3. If `prefixRead` is equal, lexicographically smaller `suffixRead` takes
-   precedence.
+3. If `prefixFragment` is equal, lexicographically smaller `suffixFragment`
+   takes precedence.
 
-Because the candidate pool contains pairwise distinct reads, Rules 1 to 3
+Because the candidate pool contains pairwise distinct fragments, Rules 1 to 3
 guarantee a strict total order over all candidate pairs.
 
-### 4.5 `filterContainedReads`
+### 4.5 `filterContainedFragments`
 
-A read `target` is contained within another read `other` if:
+A fragment `target` is contained within another fragment `other` if:
 
 - `target /= other`, and
-- `unRead target` is an infix (proper substring) of `unRead other`.
+- `unFragment target` is an infix (proper substring) of `unFragment other`.
 
 Pre-processing removes exact duplicates (retaining one unique representative)
-and drops any read that is a proper substring of another read in the pool:
+and drops any fragment that is a proper substring of another fragment in the
+pool:
 
 ```haskell
-filterContainedReads :: [Read] -> [Read]
-filterContainedReads reads =
-  let uniqueReads = nub reads
+filterContainedFragments :: [Fragment] -> [Fragment]
+filterContainedFragments fragments =
+  let uniqueFragments = nub fragments
   in [ r | r <- uniqueReads
          , not (any (\o -> r /= o &&
-                           unRead r `T.isInfixOf` unRead o) uniqueReads) ]
+                           unFragment r `T.isInfixOf` unFragment o) uniqueReads) ]
 ```
 
 ## 5. Required Assembly Behaviour
@@ -204,7 +206,7 @@ filterContainedReads reads =
 The primary assembly function has the following signature:
 
 ```haskell
-assemble :: [Read] -> Int -> Either AssemblyError [Contig]
+assemble :: [Fragment] -> Int -> Either AssemblyError [Contig]
 ```
 
 It must guarantee:
@@ -212,36 +214,36 @@ It must guarantee:
 - input validation without partial functions,
 - initial duplicate deduplication and containment elimination,
 - iterative greedy merging of the maximal candidate overlap,
-- dynamic elimination of reads engulfed by newly formed contigs,
+- dynamic elimination of fragments engulfed by newly formed contigs,
 - and canonical, permutation-invariant ordering of the final contigs.
 
 ### 5.2 Reference Reduction Algorithm
 
 ```haskell
-assemble :: [Read] -> Int -> Either AssemblyError [Contig]
-assemble reads minOverlap
+assemble :: [Fragment] -> Int -> Either AssemblyError [Contig]
+assemble fragments minOverlap
   | minOverlap < 1 = Left (InvalidMinOverlap minOverlap)
-  | any (T.null . unRead) reads = Left EmptyReadEncountered
+  | any (T.null . unFragment) fragments = Left EmptyFragmentEncountered
   | otherwise =
-      let initialPool = filterContainedReads reads
+      let initialPool = filterContainedFragments fragments
           finalPool = reducePool initialPool minOverlap
           sortedContigs = sortCanonical (map toContig finalPool)
       in Right sortedContigs
 
-reducePool :: [Read] -> Int -> [Read]
+reducePool :: [Fragment] -> Int -> [Fragment]
 reducePool pool minOverlap
   | length pool <= 1 = pool
   | otherwise =
       case findBestOverlap pool minOverlap of
         Nothing -> pool
         Just candidate ->
-          let merged = mergePair (prefixRead candidate)
-                                 (suffixRead candidate)
+          let merged = mergePair (prefixFragment candidate)
+                                 (suffixFragment candidate)
                                  (matchLength candidate)
               remaining = [ r | r <- pool
-                              , r /= prefixRead candidate
-                              , r /= suffixRead candidate ]
-              updatedPool = filterContainedReads (merged : remaining)
+                              , r /= prefixFragment candidate
+                              , r /= suffixFragment candidate ]
+              updatedPool = filterContainedFragments (merged : remaining)
           in reducePool updatedPool minOverlap
 ```
 
@@ -249,14 +251,14 @@ reducePool pool minOverlap
 
 - The pool is strictly immutable; every step returns a newly allocated list.
 - Each merge step decreases the pool size by at least 1 (more if the merge
-  engulfs another read).
+  engulfs another fragment).
 - If no valid overlap remains, reduction terminates.
-- `updatedPool` re-evaluates containment to eliminate any read engulfed within
-  the newly merged contig.
+- `updatedPool` re-evaluates containment to eliminate any fragment engulfed
+  within the newly merged contig.
 
 ### 5.4 Canonical Output Ordering
 
-Because input reads constitute an unordered multiset, the output contig list
+Because input fragments constitute an unordered multiset, the output contig list
 must be independent of input list permutations. Final contigs are sorted
 canonically:
 
@@ -275,33 +277,33 @@ sortCanonical = sortBy compareContigs
 
 ### 6.1 Empty Input
 
-If `reads` is empty, `assemble reads minOverlap` returns `Right []`.
+If `fragments` is empty, `assemble fragments minOverlap` returns `Right []`.
 
 ### 6.2 Singleton Input
 
-If `reads` contains exactly one non-empty read `[r]`, `assemble` returns
-`Right [Contig (unRead r)]`.
+If `fragments` contains exactly one non-empty fragment `[r]`, `assemble` returns
+`Right [Contig (unFragment r)]`.
 
-### 6.3 All Reads Identical
+### 6.3 All Fragments Identical
 
-If all input reads are identical (e.g. `["ACGT", "ACGT"]`), duplicates represent
-redundant sequencing coverage. Pre-processing deduplicates them to a single
-representative, returning `Right [Contig "ACGT"]`.
+If all input fragments are identical (e.g. `["ACGT", "ACGT"]`), duplicates
+represent redundant sequencing coverage. Pre-processing deduplicates them to a
+single representative, returning `Right [Contig "ACGT"]`.
 
-### 6.4 Contained Reads
+### 6.4 Contained Fragments
 
-Any read that is a proper substring of another read is discarded. This applies
-both in pre-processing and dynamically during reduction when two reads merge to
-span a third read.
+Any fragment that is a proper substring of another fragment is discarded. This
+applies both in pre-processing and dynamically during reduction when two
+fragments merge to span a third fragment.
 
 ### 6.5 No Valid Overlap
 
 If no pair meets `min_overlap`, greedy reduction terminates immediately. The
-remaining reads are wrapped as contigs and sorted in canonical order.
+remaining fragments are wrapped as contigs and sorted in canonical order.
 
 ### 6.6 Disjoint Components
 
-If reads originate from disconnected genomic regions, components reduce
+If fragments originate from disconnected genomic regions, components reduce
 independently. All resulting contigs are sorted canonically in the final output.
 
 ## 7. Computational Complexity and Invariants
@@ -309,11 +311,12 @@ independently. All resulting contigs are sorted canonically in the final output.
 ### 7.1 Termination
 
 The pool size strictly decreases by at least 1 per recursive iteration. For an
-initial filtered pool of `N` reads, reduction executes at most `N - 1` merges.
+initial filtered pool of `N` fragments, reduction executes at most `N - 1`
+merges.
 
 ### 7.2 Time Complexity
 
-For `N` reads of average length `L`:
+For `N` fragments of average length `L`:
 
 - Pairwise overlap evaluation takes $O(N^2 \cdot L)$$.
 - At most $N - 1$ reduction stages occur.
@@ -329,7 +332,7 @@ accumulator lists prevents space leaks. The memory footprint is $O(N \cdot L)$.
 Throughout all stages, the implementation guarantees:
 
 - purity and referential transparency with total functions,
-- absence of contained reads in active pools,
+- absence of contained fragments in active pools,
 - strict total ordering for overlap candidates,
 - and permutation invariance of the final contig list.
 
@@ -337,12 +340,15 @@ Throughout all stages, the implementation guarantees:
 
 The implementation is verified if:
 
-1. `assemble` accepts `[Read]` and `Int`, returning
+1. `assemble` accepts `[Fragment]` and `Int`, returning
    `Either AssemblyError [Contig]`.
-2. Invalid overlap thresholds (`< 1`) or empty reads yield descriptive errors.
-3. Identical reads collapse to a single representative contig.
-4. Reads contained within other reads or newly merged contigs are eliminated.
-5. Ties resolve strictly by `matchLength`, `prefixRead`, then `suffixRead`.
+2. Invalid overlap thresholds (`< 1`) or empty fragments yield descriptive
+   errors.
+3. Identical fragments collapse to a single representative contig.
+4. Fragments contained within other fragments or newly merged contigs are
+   eliminated.
+5. Ties resolve strictly by `matchLength`, `prefixFragment`, then
+   `suffixFragment`.
 6. Final contig output is sorted canonically and invariant to input permutation.
 7. Pure functions and immutable data structures are used exclusively.
 8. Property-based tests verify determinism, totality, and containment
@@ -353,7 +359,7 @@ The implementation is verified if:
 ### Example A: Single Valid Overlap
 
 ```haskell
-reads = [Read "ABC", Read "BCD", Read "CDE"]
+fragments = [Fragment "ABC", Fragment "BCD", Fragment "CDE"]
 minOverlap = 2
 -- Expected: Right [Contig "ABCDE"]
 ```
@@ -361,15 +367,15 @@ minOverlap = 2
 ### Example B: No Valid Overlap
 
 ```haskell
-reads = [Read "ABC", Read "DEF"]
+fragments = [Fragment "ABC", Fragment "DEF"]
 minOverlap = 2
 -- Expected: Right [Contig "ABC", Contig "DEF"]
 ```
 
-### Example C: Contained Read Removed
+### Example C: Contained Fragment Removed
 
 ```haskell
-reads = [Read "ACGT", Read "CGT"]
+fragments = [Fragment "ACGT", Fragment "CGT"]
 minOverlap = 2
 -- Expected: Right [Contig "ACGT"]
 ```
@@ -377,7 +383,7 @@ minOverlap = 2
 ### Example D: Dynamic Containment After Merge
 
 ```haskell
-reads = [Read "AAATTT", Read "TTTGGG", Read "ATT"]
+fragments = [Fragment "AAATTT", Fragment "TTTGGG", Fragment "ATT"]
 minOverlap = 3
 -- Expected: Right [Contig "AAATTTGGG"]
 -- "ATT" is engulfed by the merged sequence and eliminated.
@@ -386,7 +392,7 @@ minOverlap = 3
 ### Example E: Canonical Permutation Invariance
 
 ```haskell
-assemble [Read "DEF", Read "ABC"] 2 == assemble [Read "ABC", Read "DEF"] 2
+assemble [Fragment "DEF", Fragment "ABC"] 2 == assemble [Fragment "ABC", Fragment "DEF"] 2
 -- Both return Right [Contig "ABC", Contig "DEF"]
 ```
 
@@ -405,12 +411,12 @@ settled during requirements review:
 
 ### ADR-1: Redundant Coverage Deduplication
 
-- **Context:** An input may consist solely of identical reads (e.g.
+- **Context:** An input may consist solely of identical fragments (e.g.
   `["ACGT", "ACGT"]`). An earlier ambiguity suggested either discarding all
   duplicates or preserving a single copy.
-- **Decision:** Deduplicate identical reads to a single representative.
-  Multiple identical reads represent repeated sequencing coverage of the same
-  region, not invalid data.
+- **Decision:** Deduplicate identical fragments to a single representative.
+  Multiple identical fragments represent repeated sequencing coverage of the
+  same region, not invalid data.
 - **Consequence:** Output for an all-duplicate input is a single contig
   (`Right [Contig "ACGT"]`). Information is preserved without generating false
   self-overlaps.
@@ -418,43 +424,42 @@ settled during requirements review:
 ### ADR-2: Strict Three-Tier Deterministic Tie-Breaking
 
 - **Context:** An earlier specification included a fourth tie-breaking rule
-  referencing input list indices. However, because reads in the candidate pool
-  are distinct strings, rules 1 to 3 form a complete strict total order.
+  referencing input list indices. However, because fragments in the candidate
+  pool are distinct strings, rules 1 to 3 form a complete strict total order.
   Moreover, merged contigs lack input indices.
 - **Decision:** Remove the fourth rule. Candidate pairs are ordered solely by:
   1. Greater `matchLength`
-  2. Lexicographically smaller `prefixRead`
-  3. Lexicographically smaller `suffixRead`
+  2. Lexicographically smaller `prefixFragment`
+  3. Lexicographically smaller `suffixFragment`
 - **Consequence:** Eliminates unnecessary state tracking and index provenance
   across recursive reductions. Purity and totality are preserved.
 
 ### ADR-3: Dynamic Containment Elimination
 
-- **Context:** Merging two overlapping reads can create a composite sequence
-  that engulfs a third, previously uncontained read in the pool.
-- **Decision:** Re-evaluate containment after each merge (`updatedPool`)
-  rather than only once during pre-processing.
-- **Consequence:** Contained fragments are promptly purged, preventing
-  redundant sequence emissions and degenerate zero-gain merge cycles.
+- **Context:** Merging two overlapping fragments can create a composite sequence
+  that engulfs a third, previously uncontained fragment in the pool.
+- **Decision:** Re-evaluate containment after each merge (`updatedPool`) rather
+  than only once during pre-processing.
+- **Consequence:** Contained fragments are promptly purged, preventing redundant
+  sequence emissions and degenerate zero-gain merge cycles.
 
 ### ADR-4: Canonical Permutation Invariance
 
-- **Context:** The input model is an unordered multiset of reads. However,
-  naive recursive reduction prepends merged reads, which could produce
+- **Context:** The input model is an unordered multiset of fragments. However,
+  naive recursive reduction prepends merged fragments, which could produce
   different contig orders for permuted inputs.
 - **Decision:** Sort the final contig list canonically: descending by length,
   then ascending lexicographically.
-- **Consequence:** `assemble` is strictly permutation-invariant: any
-  permutation of the same input list produces identical contig ordering.
+- **Consequence:** `assemble` is strictly permutation-invariant: any permutation
+  of the same input list produces identical contig ordering.
 
 ### ADR-5: Total Error Handling and Strong Newtypes
 
-- **Context:** The implementation is targetted to Haskell. Partial functions
-  and stringly-typed representations introduce runtime panics and domain
-  confusion.
-- **Decision:** Use strict `Data.Text` wrapped in dedicated `Read` and
-  `Contig` newtypes. Return `Either AssemblyError [Contig]` to handle
-  invalid thresholds or empty reads as total values.
-- **Consequence:** Eliminates runtime exceptions, enforces semantic
-  distinctions between raw reads and assembled contigs, and guarantees
-  referential transparency.
+- **Context:** The implementation is targetted to Haskell. Partial functions and
+  stringly-typed representations introduce runtime panics and domain confusion.
+- **Decision:** Use strict `Data.Text` wrapped in dedicated `Fragment` and
+  `Contig` newtypes. Return `Either AssemblyError [Contig]` to handle invalid
+  thresholds or empty fragments as total values.
+- **Consequence:** Eliminates runtime exceptions, enforces semantic distinctions
+  between raw fragments and assembled contigs, and guarantees referential
+  transparency.

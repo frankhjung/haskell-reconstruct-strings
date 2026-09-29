@@ -7,106 +7,107 @@
 -- Stability   : experimental
 --
 -- Pure functional implementation of greedy overlap sequence assembly for
--- reconstructing DNA strands and text fragments from short reads.
+-- reconstructing DNA strands and text from source fragments.
 module Assembler
   ( assemble
   , calculateOverlap
   , mergePair
   , findBestOverlap
-  , filterContainedReads
+  , filterContainedFragments
   , sortCanonical
+  , isProperSubstringOf
   ) where
 
 import           Assembler.Types           (AssemblyError (..), Contig (..),
+                                            Fragment (..),
                                             OverlapCandidate (..),
-                                            OverlapLength, Read (..))
+                                            OverlapLength)
 import           Data.Containers.ListUtils (nubOrd)
 import           Data.List                 (foldl', sortBy)
 import qualified Data.Text                 as T
-import           Prelude                   hiding (Read, reads)
 
--- | Reconstruct contigs from a collection of reads given a minimum overlap.
+-- | Reconstruct contigs from a collection of fragments given a minimum overlap.
 --
 -- Returns 'Left' if preconditions are violated ('InvalidMinOverlap' or
--- 'EmptyReadEncountered'), otherwise returns 'Right' with contigs sorted
+-- 'EmptyFragmentEncountered'), otherwise returns 'Right' with contigs sorted
 -- canonically.
 --
--- >>> assemble [Read "ABC", Read "BCD", Read "CDE"] 2
+-- >>> assemble [Fragment "ABC", Fragment "BCD", Fragment "CDE"] 2
 -- Right [Contig {unContig = "ABCDE"}]
-assemble :: [Read] -> Int -> Either AssemblyError [Contig]
-assemble inputReads minOverlap
+assemble :: [Fragment] -> Int -> Either AssemblyError [Contig]
+assemble inputFragments minOverlap
   | minOverlap < 1 = Left (InvalidMinOverlap minOverlap)
-  | any (T.null . unRead) inputReads = Left EmptyReadEncountered
+  | any (T.null . unFragment) inputFragments = Left EmptyFragmentEncountered
   | otherwise =
-      let initialPool   = filterContainedReads inputReads
+      let initialPool   = filterContainedFragments inputFragments
           finalPool     = reducePool initialPool minOverlap
           sortedContigs = sortCanonical (map toContig finalPool)
       in Right sortedContigs
 
 -- | Recursively reduce the candidate pool by greedily merging the best
--- overlap pair and eliminating dynamically contained reads.
-reducePool :: [Read] -> Int -> [Read]
+-- overlap pair and eliminating dynamically contained fragments.
+reducePool :: [Fragment] -> Int -> [Fragment]
 reducePool [] _ = []
 reducePool [sole] _ = [sole]
 reducePool pool minOverlap =
       case findBestOverlap pool minOverlap of
         Nothing -> pool
         Just candidate ->
-          let merged      = mergePair (prefixRead candidate)
-                                      (suffixRead candidate)
+          let merged      = mergePair (prefixFragment candidate)
+                                      (suffixFragment candidate)
                                       (matchLength candidate)
-              remaining   = [ r | r <- pool
-                                , r /= prefixRead candidate
-                                , r /= suffixRead candidate ]
-              updatedPool = filterContainedReads (merged : remaining)
+              remaining   = [ f | f <- pool
+                                , f /= prefixFragment candidate
+                                , f /= suffixFragment candidate ]
+              updatedPool = filterContainedFragments (merged : remaining)
           in reducePool updatedPool minOverlap
 
--- | Calculate the longest suffix-prefix overlap between two distinct reads.
+-- | Calculate the longest suffix-prefix overlap between two distinct fragments.
 --
 -- Returns 0 if no match meeting or exceeding @minOverlap@ is found, or if
--- the match length equals or exceeds the length of the longer read.
+-- the match length equals or exceeds the length of the longer fragment.
 --
--- >>> calculateOverlap (Read "ATGGC") (Read "GGCGT") 2
+-- >>> calculateOverlap (Fragment "ATGGC") (Fragment "GGCGT") 2
 -- 3
-calculateOverlap :: Read -> Read -> Int -> OverlapLength
-calculateOverlap (Read r1) (Read r2) minOverlap =
-  let maxPossible = min (T.length r1) (T.length r2)
+calculateOverlap :: Fragment -> Fragment -> Int -> OverlapLength
+calculateOverlap (Fragment prefix) (Fragment suffix) minOverlap =
+  let maxPossible = min (T.length prefix) (T.length suffix)
       candidates  =
         [ len
-        | len <- [maxPossible, maxPossible - 1 .. minOverlap] -- desc lengths
-        , T.takeEnd len r1 == T.take len r2 -- test end of r1 with start of r2
-        , len < max (T.length r1) (T.length r2) -- proper overlap; not identical
+        | len <- [maxPossible, maxPossible - 1 .. minOverlap] -- lengths descending
+        , T.takeEnd len prefix == T.take len suffix -- test end of prefix with start of suffix
+        , len < max (T.length prefix) (T.length suffix) -- proper overlap; not identical
         ]
   in case candidates of
        (best : _) -> best
        []         -> 0
 
--- | Merge two reads along an overlapping boundary.
+-- | Merge two fragments along an overlapping boundary.
 --
--- >>> mergePair (Read "ATGG") (Read "GGCC") 2
--- Read {unRead = "ATGGCC"}
-mergePair :: Read -> Read -> OverlapLength -> Read
-mergePair (Read p) (Read s) overlapLen =
-  Read (p <> T.drop overlapLen s)
+-- >>> mergePair (Fragment "ATGG") (Fragment "GGCC") 2
+-- Fragment {unFragment = "ATGGCC"}
+mergePair :: Fragment -> Fragment -> OverlapLength -> Fragment
+mergePair (Fragment prefix) (Fragment suffix) overlapLen =
+  Fragment (prefix <> T.drop overlapLen suffix)
 
--- | Find the single best overlap candidate across all ordered pairs of reads.
+-- | Find the single best overlap candidate across all ordered fragment pairs.
 --
 -- Implements strict three-tier deterministic tie-breaking:
 -- 1. Longest overlap match length (descending)
 -- 2. Lexicographically smaller prefix read (ascending)
 -- 3. Lexicographically smaller suffix read (ascending)
-findBestOverlap :: [Read] -> Int -> Maybe OverlapCandidate
+findBestOverlap :: [Fragment] -> Int -> Maybe OverlapCandidate
 findBestOverlap pool minOverlap =
   let candidates =
         [ OverlapCandidate
-            { prefixRead  = r1
-            , suffixRead  = r2
+            { prefixFragment  = prefix
+            , suffixFragment  = suffix
             , matchLength = len
             }
-        | r1 <- pool
-        , r2 <- pool
-        , r1 /= r2
-        , let len = calculateOverlap r1 r2 minOverlap
+        | prefix <- pool
+        , suffix <- pool
+        , prefix /= suffix
+        , let len = calculateOverlap prefix suffix minOverlap
         , len >= minOverlap
         ]
   in case candidates of
@@ -123,19 +124,24 @@ findBestOverlap pool minOverlap =
     compareCandidates :: OverlapCandidate -> OverlapCandidate -> Ordering
     compareCandidates a b =
       compare (matchLength a) (matchLength b)
-        <> compare (prefixRead b) (prefixRead a)
-        <> compare (suffixRead b) (suffixRead a)
+        <> compare (prefixFragment b) (prefixFragment a)
+        <> compare (suffixFragment b) (suffixFragment a)
 
--- | Eliminate exact duplicates and any reads fully contained as proper
--- substrings inside longer reads.
-filterContainedReads :: [Read] -> [Read]
-filterContainedReads rawReads =
-  let uniqueReads = nubOrd rawReads
-  in [ r
-     | r <- uniqueReads
-     , not (any (\other -> r /= other && unRead r `T.isInfixOf` unRead other)
-                uniqueReads)
-     ]
+-- | Eliminate exact duplicates and any fragments fully contained as proper
+-- substrings inside longer fragments.
+filterContainedFragments :: [Fragment] -> [Fragment]
+filterContainedFragments fragments =
+  filter isNotContained uniqueFragments
+  where
+    uniqueFragments = nubOrd fragments
+    isNotContained f = not (any (isProperSubstringOf f) uniqueFragments)
+
+-- | Check if one fragment is a proper substring of another.
+-- Evaluates to True if they are not identical and the first is fully
+-- contained in the second.
+isProperSubstringOf :: Fragment -> Fragment -> Bool
+isProperSubstringOf s1 s2 =
+  s1 /= s2 && unFragment s1 `T.isInfixOf` unFragment s2
 
 -- | Sort contigs into canonical output order:
 -- 1. Descending sequence length (longer first)
@@ -146,6 +152,6 @@ sortCanonical = sortBy compareContigs
     compareContigs (Contig a) (Contig b) =
       compare (T.length b) (T.length a) <> compare a b
 
--- | Convert an assembled 'Read' to a 'Contig'.
-toContig :: Read -> Contig
-toContig = Contig . unRead
+-- | Convert an assembled 'Fragment' to a 'Contig'.
+toContig :: Fragment -> Contig
+toContig = Contig . unFragment

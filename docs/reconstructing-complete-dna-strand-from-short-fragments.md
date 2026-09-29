@@ -7,8 +7,8 @@ with one another.
 
 Modern sequencers cannot read a chromosome from end to end. Instead, they shred
 millions of copies of the genome into short fragments called "reads" (ranging
-from 150 base pairs in short-read sequencing to tens of thousands of base pairs
-in long-read technologies).
+from 150 base pairs in short-fragment sequencing to tens of thousands of base
+pairs in long-fragment technologies).
 
 The computational challenge is to identify where these fragments share identical
 subsequences and stitch them together into contiguous sequences called
@@ -16,17 +16,17 @@ subsequences and stitch them together into contiguous sequences called
 
 Two fundamental algorithmic paradigms govern genome assembly:
 
-1. **Overlap-Layout-Consensus (OLC) and String Graphs:** Compares reads directly
-   to identify suffix-prefix overlaps, constructs an overlap graph, and threads
-   a path through every read. Originally developed for Sanger sequencing, OLC
-   has seen a major resurgence as the primary paradigm for modern long-read
-   sequencing (e.g. PacBio HiFi and Oxford Nanopore) where reads are long enough
-   to span complex genomic repeats.
-2. **[de Bruijn Graphs (DBG)][de-bruijn-graph]**: Breaks reads into smaller
+1. **Overlap-Layout-Consensus (OLC) and String Graphs:** Compares fragments
+   directly to identify suffix-prefix overlaps, constructs an overlap graph, and
+   threads a path through every fragment. Originally developed for Sanger
+   sequencing, OLC has seen a major resurgence as the primary paradigm for
+   modern long-read sequencing (e.g. PacBio HiFi and Oxford Nanopore) where
+   fragments are long enough to span complex genomic repeats.
+2. **[de Bruijn Graphs (DBG)][de-bruijn-graph]**: Breaks fragments into smaller
    substrings of fixed length $k$ ($k$-mers) and models assembly as an
    [Eulerian path][eulerian-path] problem. DBG is the primary workhorse for
    high-throughput short-read technologies (e.g. Illumina), where billions of
-   short reads make pairwise comparisons computationally intractable.
+   short fragments make pairwise comparisons computationally intractable.
 
 ## 1. The Overlap Approach
 
@@ -40,12 +40,12 @@ identical genomic repeats into a single copy. In practice, assemblers use
 graph-based overlap representations that preserve repeat structure and coverage
 information.
 
-In an **overlap graph**, each read is represented as a vertex (node), and a
-directed edge is drawn from read $A$ to read $B$ if a suffix of $A$ matches a
-prefix of $B$. Reconstructing the original genome by visiting each read exactly
-once corresponds to finding a **Hamiltonian path**, which is an NP-complete
-problem. A **greedy overlap heuristic** offers an effective approximation on
-clean, toy-scale data.
+In an **overlap graph**, each fragment is represented as a vertex (node), and a
+directed edge is drawn from fragment $A$ to fragment $B$ if a suffix of $A$
+matches a prefix of $B$. Reconstructing the original genome by visiting each
+fragment exactly once corresponds to finding a **Hamiltonian path**, which is an
+NP-complete problem. A **greedy overlap heuristic** offers an effective
+approximation on clean, toy-scale data.
 
 ### How the Greedy Overlap Algorithm Works
 
@@ -63,11 +63,11 @@ clean, toy-scale data.
 
 ### Walkthrough with Toy Strings
 
-Suppose we have three reads from an unknown sequence:
+Suppose we have three fragments from an unknown sequence:
 
-- Read 1: `ATGGC`
-- Read 2: `GGCGT`
-- Read 3: `CGTGCA`
+- Fragment 1: `ATGGC`
+- Fragment 2: `GGCGT`
+- Fragment 3: `CGTGCA`
 
 Assume a minimum overlap threshold of `min_overlap = 2`.
 
@@ -77,7 +77,7 @@ Step 1: Check pairwise suffix-to-prefix overlaps
   GGCGT  -> CGTGCA : Suffix 'CGT' matches prefix 'CGT' (overlap = 3)
   ATGGC  -> CGTGCA : Suffix 'C' matches prefix 'C' (overlap = 1, < threshold)
 
-Step 2 & 3: Merge highest overlap (Read 1 and Read 2 on overlap = 3)
+Step 2 & 3: Merge highest overlap (Fragment 1 and Fragment 2 on overlap = 3)
   ATGGC
     GGCGT
   --------
@@ -93,18 +93,18 @@ Step 4: Repeat for remaining strings (overlap = 3)
 
 ## 2. The de Bruijn Graph Approach
 
-The greedy overlap approach requires comparing reads against one another,
-scaling as $O(N^2 \cdot L)$ where $N$ is the number of reads and $L$ is read
-length. When handling hundreds of millions of short reads, building an explicit
-overlap graph becomes computationally intractable.
+The greedy overlap approach requires comparing fragments against one another,
+scaling as $O(N^2 \cdot L)$ where $N$ is the number of fragments and $L$ is
+fragment length. When handling hundreds of millions of short fragments, building
+an explicit overlap graph becomes computationally intractable.
 
 Modern short-read assemblers therefore use de Bruijn graphs instead of a direct
-pairwise read-overlap model.
+pairwise fragment-overlap model.
 
 ### How de Bruijn Graphs Work
 
-1. **Deconstruct Reads into $k$-mers:** Choose a fixed length $k$. Slide a
-   window of size $k$ across every read to extract all constituent $k$-mers.
+1. **Deconstruct Fragments into $k$-mers:** Choose a fixed length $k$. Slide a
+   window of size $k$ across every fragment to extract all constituent $k$-mers.
 2. **Define Nodes and Edges:**
    - **Nodes:** Every distinct $(k - 1)$-mer (the prefix or suffix of a
      $k$-mer).
@@ -123,10 +123,10 @@ a simple single-visit path.
 
 ### Walkthrough with the Same Toy Strings
 
-Using the exact same input reads as Section 1 (`ATGGC`, `GGCGT`, `CGTGCA`) with
-$k = 4$:
+Using the exact same input fragments as Section 1 (`ATGGC`, `GGCGT`, `CGTGCA`)
+with $k = 4$:
 
-Extract all 4-mers from each read:
+Extract all 4-mers from each fragment:
 
 - From `ATGGC`: `ATGG`, `TGGC`
 - From `GGCGT`: `GGCG`, `GCGT`
@@ -162,17 +162,17 @@ When transitioning from toy character strings to biological sequencing data,
 assemblers must resolve multiple physical complexities:
 
 - **Genomic Repeats:** Genomes contain extensive repetitive elements
-  (transposons, segmental duplications) that are longer than individual reads or
-  $k$-mers. In a graph, repeats create tangled cycles and branching junctions,
-  rendering reconstruction ambiguous.
+  (transposons, segmental duplications) that are longer than individual
+  fragments or $k$-mers. In a graph, repeats create tangled cycles and branching
+  junctions, rendering reconstruction ambiguous.
 - **Sequencing Errors:** A single misread nucleotide creates spurious $k$-mers,
   producing false dead-end branches ("tips") or alternative bubbles in the
   graph. Assemblers employ error correction and tip-clipping algorithms to prune
   these artefacts.
-- **Reverse Complements:** DNA is double-stranded. Reads originate randomly from
-  either the forward or reverse strand. An assembler must match reads against
-  both forward sequences and their reverse complements (e.g. `AAGCT` and its
-  reverse complement `AGCTT`).
+- **Reverse Complements:** DNA is double-stranded. Fragments originate randomly
+  from either the forward or reverse strand. An assembler must match fragments
+  against both forward sequences and their reverse complements (e.g. `AAGCT` and
+  its reverse complement `AGCTT`).
 - **Uneven Coverage:** Sequencing depth varies across the genome due to PCR bias
   and GC content. Regions with low coverage cause breaks in the graph, resulting
   in fragmented contigs rather than whole chromosomes.
@@ -181,7 +181,7 @@ assemblers must resolve multiple physical complexities:
     (150–300 bp). Ideal for de Bruijn graphs, but cannot span long repeats.
   - **Long Reads (PacBio HiFi, Nanopore):** Tens of thousands of base pairs in
     length, capable of spanning complex repeats. OLC and string graphs are the
-    dominant paradigm because breaking long reads into short $k$-mers would
+    dominant paradigm because breaking long fragments into short $k$-mers would
     destroy their long-range structural information.
 
 ## 4. See Also

@@ -5,12 +5,10 @@ name: haskell reconstruct-strings
 on:
   push:
     branches:
-      - main
-      - master
+      - "**"
   pull_request:
     branches:
-      - main
-      - master
+      - "**"
 
 jobs:
   build-and-test:

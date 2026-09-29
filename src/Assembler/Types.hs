@@ -6,10 +6,10 @@
 -- Maintainer  : frankhjung@linux.com
 -- Stability   : experimental
 --
--- Domain models and error types representing genetic reads, assembled
+-- Domain models and error types representing genetic fragments, assembled
 -- contigs, overlap candidates, and assembly errors.
 module Assembler.Types
-  ( Read (..)
+  ( Fragment (..)
   , Contig (..)
   , OverlapLength
   , OverlapCandidate (..)
@@ -17,15 +17,14 @@ module Assembler.Types
   ) where
 
 import           Data.Text (Text)
-import           Prelude   hiding (Read)
 
--- | A single sequence fragment read from sequencing data.
-newtype Read = Read
-  { unRead :: Text
+-- | A single fragment from sequencing data.
+newtype Fragment = Fragment
+  { unFragment :: Text
   }
   deriving stock (Eq, Ord, Show)
 
--- | An assembled contiguous sequence resulting from merging reads.
+-- | An assembled contiguous sequence resulting from merging fragments.
 newtype Contig = Contig
   { unContig :: Text
   }
@@ -34,13 +33,13 @@ newtype Contig = Contig
 -- | Number of characters sharing an exact suffix-prefix match.
 type OverlapLength = Int
 
--- | An ordered candidate pair of reads with a verified overlap match.
+-- | An ordered candidate pair of fragments with a verified overlap match.
 data OverlapCandidate = OverlapCandidate
-  { prefixRead  :: !Read
-    -- ^ The read contributing the matching suffix.
-  , suffixRead  :: !Read
-    -- ^ The read contributing the matching prefix.
-  , matchLength :: !OverlapLength
+  { prefixFragment :: !Fragment
+    -- ^ The fragment contributing the matching suffix.
+  , suffixFragment :: !Fragment
+    -- ^ The fragment contributing the matching prefix.
+  , matchLength    :: !OverlapLength
     -- ^ Length of the matching suffix-prefix overlap.
   }
   deriving stock (Eq, Ord, Show)
@@ -49,6 +48,6 @@ data OverlapCandidate = OverlapCandidate
 data AssemblyError
   = InvalidMinOverlap !Int
     -- ^ The specified minimum overlap threshold is strictly less than 1.
-  | EmptyReadEncountered
-    -- ^ At least one input read contains no characters.
+  | EmptyFragmentEncountered
+    -- ^ At least one input fragment contains no characters.
   deriving stock (Eq, Show)

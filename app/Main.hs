@@ -12,7 +12,7 @@ module Main (main) where
 
 import           Assembler           (assemble)
 import           Assembler.Types     (AssemblyError (..), Contig (..),
-                                      Read (..))
+                                      Fragment (..))
 import           Control.Applicative (many)
 import qualified Data.Text           as T
 import qualified Data.Text.IO        as TIO
@@ -21,7 +21,6 @@ import           Options.Applicative (Parser, auto, execParser, fullDesc,
                                       option, optional, progDesc, short,
                                       showDefault, strArgument, strOption,
                                       value)
-import           Prelude             hiding (Read)
 import           System.Exit         (exitFailure)
 import           System.IO           (stderr)
 
@@ -29,7 +28,7 @@ import           System.IO           (stderr)
 data Options = Options
   { optMinOverlap :: !Int
   , optInputFile  :: !(Maybe FilePath)
-  , optReads      :: ![String]
+  , optFragments  :: ![String]
   }
 
 optionsParser :: Parser Options
@@ -49,13 +48,13 @@ optionsParser =
               ( long "file"
                   <> short 'f'
                   <> metavar "FILE"
-                  <> help "Input file containing one read per line"
+                  <> help "Input file containing one fragment per line"
               )
           )
     <*> many
           ( strArgument
-              ( metavar "READ..."
-                  <> help "Read fragments passed as arguments"
+              ( metavar "FRAGMENT..."
+                  <> help "Fragment sequences passed as arguments"
               )
           )
 
@@ -64,15 +63,15 @@ main :: IO ()
 main = do
   opts <- execParser optsInfo
   inputContent <- readInput opts
-  let readsList = map (Read . T.strip) inputContent
+  let readsList = map (Fragment . T.strip) inputContent
   case assemble readsList (optMinOverlap opts) of
     Left (InvalidMinOverlap n) -> do
       TIO.hPutStrLn stderr $ "Error: minimum overlap must be >= 1 (got "
                           <> T.pack (show n)
                           <> ")"
       exitFailure
-    Left EmptyReadEncountered -> do
-      TIO.hPutStrLn stderr "Error: empty read encountered in input"
+    Left EmptyFragmentEncountered -> do
+      TIO.hPutStrLn stderr "Error: empty fragment encountered in input"
       exitFailure
     Right contigs ->
       mapM_ (TIO.putStrLn . unContig) contigs
@@ -82,12 +81,12 @@ main = do
         (helper <*> optionsParser)
         ( fullDesc
             <> progDesc
-              "Reconstruct DNA sequences from overlapping read fragments"
+              "Reconstruct DNA sequences from overlapping fragment sequences"
             <> header "reconstruct-strings - greedy overlap sequence assembler"
         )
 
     readInput :: Options -> IO [T.Text]
-    readInput opts = case (optInputFile opts, optReads opts) of
+    readInput opts = case (optInputFile opts, optFragments opts) of
       (Just filePath, _) ->
         filter (not . T.null) . T.lines <$> TIO.readFile filePath
       (Nothing, rs)
