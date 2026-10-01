@@ -156,8 +156,10 @@ The project uses [Cabal][cabal-url] and a `Makefile` task runner.
   build dependencies, compiler flags, and components.
 - [`Makefile`][makefile]: Development automation targets for formatting,
   linting, building, testing, and documentation generation.
-- [`src/Assembler.hs`][src-assembler]: Core greedy reduction logic and
-  containment filtering.
+- [`src/Assembler.hs`][src-assembler]: Public API exporting the main assembly
+  contract.
+- [`src/Assembler/Internal.hs`][src-assembler-internal]: Core greedy reduction
+  logic and containment filtering.
 - [`src/Assembler/Types.hs`][src-assembler-types]: Domain newtypes (`Fragment`,
   `Contig`), candidate records, and error types.
 - [`app/Main.hs`][app-main]: Command-line interface with option parsing.
@@ -174,8 +176,8 @@ The project uses [Cabal][cabal-url] and a `Makefile` task runner.
 
 ## Assembly Dynamics and Parameter Heuristics
 
-Assembler performance depends on the interaction between alphabet size, read
-length, minimum overlap threshold, and sequencing coverage.
+Assembler performance depends on the interaction between alphabet size,
+fragment length, minimum overlap threshold, and sequencing coverage.
 
 ### Alphabet Size and Collision Probability
 
@@ -203,9 +205,9 @@ alphabet (`A-Z`):
 - **Unrelated Random Noise**: When assembling random fragments without a shared
   reference sequence, `ATGC` collapses fragments into spurious contigs due to
   frequent coincidental matches. Conversely, `A-Z` fragments rarely share
-  accidental overlaps, causing the greedy reduction in [`Assembler.hs`]
-  [src-assembler] to halt immediately without merges. The apparent assembly of
-  small alphabets is an illusion caused by chimeric joins.
+  accidental overlaps, causing the greedy reduction in [`Assembler.Internal.hs`]
+  [src-assembler-internal] to halt immediately without merges. The apparent
+  assembly of small alphabets is an illusion caused by chimeric joins.
 - **Sensitivity to Coverage Gaps**: Over `A-Z`, 4-mers are statistically
   unique ($1$ in $456{,}976$). If physical coverage has a gap where adjacent
   fragments overlap by less than $m$, the assembler halts and outputs fragmented
@@ -219,8 +221,8 @@ alphabet (`A-Z`):
 ### Minimum Overlap Lower Bound
 
 For a pool of $N$ fragments, there are $N(N - 1)$ ordered pairwise comparisons
-in [`findBestOverlap`][src-assembler]. To ensure the expected number of false
-positive pairwise matches across the dataset is less than 1:
+in [`findBestOverlap`][src-assembler-internal]. To ensure the expected
+number of false-positive pairwise matches across the dataset is less than 1:
 
 $$E[\text{spurious pairs}] \approx N^2 \cdot |\Sigma|^{-m} < 1$$
 
@@ -267,7 +269,7 @@ fragmentation into separate contigs.
   - Target $C_{\text{eff}} = C(1 - \frac{m}{\bar{L}}) \ge 10$.
   - Nominal physical coverage: $15 \times$ to $30 \times$.
 
-#### Worked Configuration Examples
+### Worked Configuration Examples
 
 The following calibrated configurations illustrate parameter selection for a
 target sequence of length $G = 1{,}000$ units and $N = 1{,}000$ fragments:
@@ -345,5 +347,6 @@ reconstruction commands on pushes and pull requests.
 [req-002]: docs/REQ-002-shell-script-to-make-strands.md
 [src-assembler-types]: src/Assembler/Types.hs
 [src-assembler]: src/Assembler.hs
+[src-assembler-internal]: src/Assembler/Internal.hs
 [test-assembler-spec]: test/AssemblerSpec.hs
 [test-spec]: test/Spec.hs

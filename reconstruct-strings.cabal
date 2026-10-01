@@ -47,6 +47,7 @@ library
   hs-source-dirs:  src
   exposed-modules:
     Assembler
+    Assembler.Internal
     Assembler.Types
 
   build-depends:

@@ -11,9 +11,9 @@
 -- tie-breaking rules, containment filtering, and canonical ordering.
 module AssemblerSpec (spec) where
 
-import           Assembler       (assemble, calculateOverlap, compareCandidates,
-                                  filterContainedFragments, isProperSubstringOf,
-                                  mergePair, selectBetter)
+import           Assembler.Internal (assemble, calculateOverlap, compareCandidates,
+                                     filterContainedFragments, isProperSubstringOf,
+                                     mergePair, selectBetter)
 import           Assembler.Types (AssemblyError (..), Contig (..),
                                   Fragment (..), OverlapCandidate (..))
 import qualified Data.Text       as T
