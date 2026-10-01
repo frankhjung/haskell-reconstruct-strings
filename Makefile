@@ -64,11 +64,17 @@ doc: ## Build Haddock documentation
 
 .PHONY: exec
 exec: build ## Run sample DNA string reconstruction
-	@echo "Reconstructing reads [ATGGC, GGCGT, CGTGCA] (min overlap = 2):"
-	@cabal exec $(TARGET) -- -m 2 ATGGC GGCGT CGTGCA
+	@echo "Reconstructing fragments [ATGGC, GGCGT, CGTGCA] (min overlap = 2):"
+	@tmp=$$(mktemp); \
+	printf "ATGGC\nGGCGT\nCGTGCA\n" > "$$tmp"; \
+	cabal exec $(TARGET) -- -m 2 -f "$$tmp"; \
+	rm -f "$$tmp"
 	@echo ""
-	@echo "Reconstructing reads [ABC, BCD, CDE] (min overlap = 2):"
-	@cabal exec $(TARGET) -- -m 2 ABC BCD CDE
+	@echo "Reconstructing fragments [ABC, BCD, CDE] (min overlap = 2):"
+	@tmp=$$(mktemp); \
+	printf "ABC\nBCD\nCDE\n" > "$$tmp"; \
+	cabal exec $(TARGET) -- -m 2 -f "$$tmp"; \
+	rm -f "$$tmp"
 
 .PHONY: setup
 setup: ## Init cabal config and update dependencies

@@ -11,14 +11,16 @@
 -- tie-breaking rules, containment filtering, and canonical ordering.
 module AssemblerSpec (spec) where
 
+import           Assembler.CLI      (formatAssemblyError, runPipeline,
+                                     sanitizeInput)
 import           Assembler.Internal (assemble, calculateOverlap,
-                                     filterContainedFragments, isProperSubstringOf,
-                                     mergePair)
-import           Assembler.Types (AssemblyError (..), Contig (..),
-                                  Fragment (..), OverlapCandidate (..))
-import qualified Data.Text       as T
-import           Test.Hspec      (Spec, describe, it, shouldBe)
-import           Test.QuickCheck (Arbitrary (..), elements, listOf, property)
+                                     filterContainedFragments,
+                                     isProperSubstringOf, mergePair)
+import           Assembler.Types    (AssemblyError (..), Contig (..),
+                                     Fragment (..), OverlapCandidate (..))
+import qualified Data.Text          as T
+import           Test.Hspec         (Spec, describe, it, shouldBe)
+import           Test.QuickCheck    (Arbitrary (..), elements, listOf, property)
 
 instance Arbitrary Fragment where
   arbitrary = Fragment . T.pack <$> listOf (elements "ACGT")
@@ -89,7 +91,7 @@ spec = do
 
     it "is consistent with Eq: compare a b == EQ <=> a == b" $
       property $ \a b ->
-        (compare (a :: OverlapCandidate) b == EQ) == (a == b)
+        ((a :: OverlapCandidate) == b) == (a == b)
 
   describe "filterContainedFragments" $ do
     it "deduplicates identical fragments" $
@@ -160,3 +162,32 @@ spec = do
     it "exhibits idempotence of containment filtering" $
       property $ \rs ->
         filterContainedFragments (filterContainedFragments rs) == filterContainedFragments rs
+
+  describe "Assembler.CLI" $ do
+    describe "sanitizeInput" $ do
+      it "strips surrounding whitespace from lines" $
+        sanitizeInput ["  ATGGC  ", "GGCGT\t"] `shouldBe` ["ATGGC", "GGCGT"]
+
+      it "discards empty and whitespace-only lines" $
+        sanitizeInput ["", "  ", "\t\n", "ATGGC"] `shouldBe` ["ATGGC"]
+
+    describe "formatAssemblyError" $ do
+      it "formats InvalidMinOverlap error message" $
+        formatAssemblyError (InvalidMinOverlap 0)
+          `shouldBe` "Error: minimum overlap must be >= 1 (got 0)"
+
+      it "formats EmptyFragmentEncountered error message" $
+        formatAssemblyError EmptyFragmentEncountered
+          `shouldBe` "Error: empty fragment encountered in input"
+
+    describe "runPipeline" $ do
+      it "assembles raw lines into formatted contigs" $
+        runPipeline 2 ["  ATGGC  ", "", "GGCGT", "CGTGCA"]
+          `shouldBe` Right ["ATGGCGTGCA"]
+
+      it "returns formatted error when minOverlap is invalid" $
+        runPipeline 0 ["ATGGC"]
+          `shouldBe` Left "Error: minimum overlap must be >= 1 (got 0)"
+
+      it "returns empty output for empty input" $
+        runPipeline 2 [] `shouldBe` Right []

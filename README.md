@@ -73,7 +73,7 @@ sequenceDiagram
 Run the assembler directly using Cabal:
 
 ```bash
-cabal run reconstruct-strings -- -m 2 ATGGC GGCGT CGTGCA
+printf "ATGGC\nGGCGT\nCGTGCA\n" | cabal run reconstruct-strings -- -m 2
 ```
 
 Output:
@@ -86,8 +86,7 @@ ATGGCGTGCA
 
 - `-m`, `--min-overlap INT`: Minimum overlap threshold (default: `2`).
 - `-f`, `--file FILE`: Read fragments from a file (one fragment per line).
-- `FRAGMENT...`: Read fragments passed as positional arguments or piped via
-  `stdin`.
+  If omitted, fragments are read from standard input (`stdin`).
 
 ### Generating Synthetic Fragments
 
@@ -158,11 +157,14 @@ The project uses [Cabal][cabal-url] and a `Makefile` task runner.
   linting, building, testing, and documentation generation.
 - [`src/Assembler.hs`][src-assembler]: Public API exporting the main assembly
   contract.
+- [`src/Assembler/CLI.hs`][src-assembler-cli]: Pure transformation pipeline and
+  error formatting for the CLI.
 - [`src/Assembler/Internal.hs`][src-assembler-internal]: Core greedy reduction
   logic and containment filtering.
 - [`src/Assembler/Types.hs`][src-assembler-types]: Domain newtypes (`Fragment`,
   `Contig`), candidate records, and error types.
-- [`app/Main.hs`][app-main]: Command-line interface with option parsing.
+- [`app/Main.hs`][app-main]: Command-line interface with option parsing and
+  stream I/O.
 - [`test/Spec.hs`][test-spec]: Test driver with `hspec-discover`.
 - [`test/AssemblerSpec.hs`][test-assembler-spec]: Hspec and QuickCheck test
   suite.
@@ -347,6 +349,7 @@ reconstruction commands on pushes and pull requests.
 [req-002]: docs/REQ-002-shell-script-to-make-strands.md
 [src-assembler-types]: src/Assembler/Types.hs
 [src-assembler]: src/Assembler.hs
+[src-assembler-cli]: src/Assembler/CLI.hs
 [src-assembler-internal]: src/Assembler/Internal.hs
 [test-assembler-spec]: test/AssemblerSpec.hs
 [test-spec]: test/Spec.hs

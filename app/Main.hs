@@ -6,21 +6,17 @@
 -- Maintainer  : frankhjung@linux.com
 -- Stability   : experimental
 --
--- Executable entry point accepting short read fragments and assembling them
+-- Executable entry point accepting sequence fragments and assembling them
 -- into canonical contigs using greedy overlap reduction.
 module Main (main) where
 
-import           Assembler           (assemble)
-import           Assembler.Types     (AssemblyError (..), Contig (..),
-                                      Fragment (..))
-import           Control.Applicative (many)
+import           Assembler.CLI       (runPipeline)
 import qualified Data.Text           as T
 import qualified Data.Text.IO        as TIO
 import           Options.Applicative (Parser, auto, execParser, fullDesc,
                                       header, help, helper, info, long, metavar,
                                       option, optional, progDesc, short,
-                                      showDefault, strArgument, strOption,
-                                      value)
+                                      showDefault, strOption, value)
 import           System.Exit         (exitFailure)
 import           System.IO           (stderr)
 
@@ -28,7 +24,6 @@ import           System.IO           (stderr)
 data Options = Options
   { optMinOverlap :: !Int
   , optInputFile  :: !(Maybe FilePath)
-  , optFragments  :: ![String]
   }
 
 optionsParser :: Parser Options
@@ -51,30 +46,18 @@ optionsParser =
                   <> help "Input file containing one fragment per line"
               )
           )
-    <*> many
-          ( strArgument
-              ( metavar "FRAGMENT..."
-                  <> help "Fragment sequences passed as arguments"
-              )
-          )
 
 -- | Run CLI application.
 main :: IO ()
 main = do
   opts <- execParser optsInfo
   inputContent <- readInput opts
-  let readsList = map (Fragment . T.strip) inputContent
-  case assemble readsList (optMinOverlap opts) of
-    Left (InvalidMinOverlap n) -> do
-      TIO.hPutStrLn stderr $ "Error: minimum overlap must be >= 1 (got "
-                          <> T.pack (show n)
-                          <> ")"
-      exitFailure
-    Left EmptyFragmentEncountered -> do
-      TIO.hPutStrLn stderr "Error: empty fragment encountered in input"
+  case runPipeline (optMinOverlap opts) inputContent of
+    Left errStr -> do
+      TIO.hPutStrLn stderr errStr
       exitFailure
     Right contigs ->
-      mapM_ (TIO.putStrLn . unContig) contigs
+      mapM_ TIO.putStrLn contigs
   where
     optsInfo =
       info
@@ -86,9 +69,6 @@ main = do
         )
 
     readInput :: Options -> IO [T.Text]
-    readInput opts = case (optInputFile opts, optFragments opts) of
-      (Just filePath, _) ->
-        filter (not . T.null) . T.lines <$> TIO.readFile filePath
-      (Nothing, rs)
-        | not (null rs) -> pure (map T.pack rs)
-        | otherwise     -> filter (not . T.null) . T.lines <$> TIO.getContents
+    readInput opts = case optInputFile opts of
+      Just filePath -> T.lines <$> TIO.readFile filePath
+      Nothing       -> T.lines <$> TIO.getContents
