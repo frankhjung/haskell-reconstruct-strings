@@ -64,6 +64,8 @@ doc: ## Build Haddock documentation
 
 .PHONY: exec
 exec: build ## Run sample DNA string reconstruction
+	@cabal exec $(TARGET) -- --help
+	@echo
 	@echo "Reconstructing fragments [ATGGC, GGCGT, CGTGCA] (min overlap = 2):"
 	@tmp=$$(mktemp); \
 	printf "ATGGC\nGGCGT\nCGTGCA\n" > "$$tmp"; \

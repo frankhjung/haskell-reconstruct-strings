@@ -51,14 +51,14 @@ optionsParser =
 main :: IO ()
 main = do
   opts <- execParser optsInfo
-  inputContent <- readInput opts
-  case runPipeline (optMinOverlap opts) inputContent of
-    Left errStr -> do
-      TIO.hPutStrLn stderr errStr
-      exitFailure
-    Right contigs ->
-      mapM_ TIO.putStrLn contigs
+  rawLines <- maybe (T.lines <$> TIO.getContents) -- default read from stdin
+                    (fmap T.lines . TIO.readFile) -- from a file
+                    (optInputFile opts)           -- maybe a file name
+  either reportError
+         (mapM_ TIO.putStrLn)
+         (runPipeline (optMinOverlap opts) rawLines)
   where
+    reportError err = TIO.hPutStrLn stderr err >> exitFailure
     optsInfo =
       info
         (helper <*> optionsParser)
@@ -67,8 +67,3 @@ main = do
               "Reconstruct DNA sequences from overlapping fragment sequences"
             <> header "reconstruct-strings - greedy overlap sequence assembler"
         )
-
-    readInput :: Options -> IO [T.Text]
-    readInput opts = case optInputFile opts of
-      Just filePath -> T.lines <$> TIO.readFile filePath
-      Nothing       -> T.lines <$> TIO.getContents

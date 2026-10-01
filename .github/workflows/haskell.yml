@@ -54,5 +54,5 @@ jobs:
 
       - name: Run sample reconstruction
         run: |
-          cabal run reconstruct-strings -- -m 2 ATGGC GGCGT CGTGCA
-          cabal run reconstruct-strings -- -m 2 ABC BCD CDE
+          printf "ATGGC\nGGCGT\nCGTGCA\n" | cabal run reconstruct-strings -- -m 2
+          printf "ABC\nBCD\nCDE\n" | cabal run reconstruct-strings -- -m 2
