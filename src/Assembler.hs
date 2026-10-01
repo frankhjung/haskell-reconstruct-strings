@@ -13,6 +13,8 @@ module Assembler
   , calculateOverlap
   , mergePair
   , findBestOverlap
+  , selectBetter
+  , compareCandidates
   , filterContainedFragments
   , sortCanonical
   , isProperSubstringOf
@@ -90,12 +92,47 @@ mergePair :: Fragment -> Fragment -> OverlapLength -> Fragment
 mergePair (Fragment prefix) (Fragment suffix) overlapLen =
   Fragment (prefix <> T.drop overlapLen suffix)
 
+-- | Select the preferred overlap candidate according to the assembly ordering.
+--
+-- The current candidate wins unless the next candidate is strictly better under
+-- the deterministic ordering defined by 'compareCandidates'.
+--
+-- >>> let left = OverlapCandidate (Fragment "AAA") (Fragment "BBB") 2
+-- >>> let right = OverlapCandidate (Fragment "CCC") (Fragment "DDD") 3
+-- >>> selectBetter left right
+-- OverlapCandidate {prefixFragment = Fragment {unFragment = "CCC"}, suffixFragment = Fragment {unFragment = "DDD"}, matchLength = 3}
+selectBetter :: OverlapCandidate -> OverlapCandidate -> OverlapCandidate
+selectBetter curr nextCandidate =
+  case compareCandidates curr nextCandidate of
+    LT -> nextCandidate
+    _  -> curr
+
+-- | Compare two overlap candidates using the assembly selection rules.
+--
+-- Ordering is determined by:
+-- 1. longer overlap match length first
+-- 2. lexicographically smaller prefix fragment first
+-- 3. lexicographically smaller suffix fragment first
+--
+-- >>> let left = OverlapCandidate (Fragment "ABC") (Fragment "XYZ") 3
+-- >>> let right = OverlapCandidate (Fragment "ABD") (Fragment "UVW") 3
+-- >>> compareCandidates left right
+-- GT
+compareCandidates :: OverlapCandidate -> OverlapCandidate -> Ordering
+compareCandidates a b =
+  compare (matchLength a) (matchLength b)
+    <> compare (prefixFragment b) (prefixFragment a)
+    <> compare (suffixFragment b) (suffixFragment a)
+
 -- | Find the single best overlap candidate across all ordered fragment pairs.
 --
 -- Implements strict three-tier deterministic tie-breaking:
 -- 1. Longest overlap match length (descending)
--- 2. Lexicographically smaller prefix read (ascending)
--- 3. Lexicographically smaller suffix read (ascending)
+-- 2. Lexicographically smaller prefix fragment (ascending)
+-- 3. Lexicographically smaller suffix fragment (ascending)
+--
+-- >>> findBestOverlap [Fragment "ABC", Fragment "BCD", Fragment "CDE"] 2
+-- Just (OverlapCandidate {prefixFragment = Fragment {unFragment = "ABC"}, suffixFragment = Fragment {unFragment = "BCD"}, matchLength = 2})
 findBestOverlap :: [Fragment] -> Int -> Maybe OverlapCandidate
 findBestOverlap pool minOverlap =
   let candidates =
@@ -114,21 +151,12 @@ findBestOverlap pool minOverlap =
        [] -> Nothing
        (firstCandidate : rest) ->
          Just (foldl' selectBetter firstCandidate rest)
-  where
-    selectBetter :: OverlapCandidate -> OverlapCandidate -> OverlapCandidate
-    selectBetter curr nextCandidate =
-      case compareCandidates curr nextCandidate of
-        LT -> nextCandidate
-        _  -> curr
-
-    compareCandidates :: OverlapCandidate -> OverlapCandidate -> Ordering
-    compareCandidates a b =
-      compare (matchLength a) (matchLength b)
-        <> compare (prefixFragment b) (prefixFragment a)
-        <> compare (suffixFragment b) (suffixFragment a)
 
 -- | Eliminate exact duplicates and any fragments fully contained as proper
 -- substrings inside longer fragments.
+--
+-- >>> filterContainedFragments [Fragment "ACGT", Fragment "CGT", Fragment "ACGT"]
+-- [Fragment {unFragment = "ACGT"}]
 filterContainedFragments :: [Fragment] -> [Fragment]
 filterContainedFragments fragments =
   filter isNotContained uniqueFragments
@@ -139,6 +167,9 @@ filterContainedFragments fragments =
 -- | Check if one fragment is a proper substring of another.
 -- Evaluates to True if they are not identical and the first is fully
 -- contained in the second.
+--
+-- >>> isProperSubstringOf (Fragment "CGT") (Fragment "ACGTA")
+-- True
 isProperSubstringOf :: Fragment -> Fragment -> Bool
 isProperSubstringOf s1 s2 =
   s1 /= s2 && unFragment s1 `T.isInfixOf` unFragment s2
@@ -146,6 +177,9 @@ isProperSubstringOf s1 s2 =
 -- | Sort contigs into canonical output order:
 -- 1. Descending sequence length (longer first)
 -- 2. Ascending lexicographical sequence order
+--
+-- >>> sortCanonical [Contig "DEF", Contig "ABC", Contig "AB"]
+-- [Contig {unContig = "DEF"},Contig {unContig = "ABC"},Contig {unContig = "AB"}]
 sortCanonical :: [Contig] -> [Contig]
 sortCanonical = sortBy compareContigs
   where

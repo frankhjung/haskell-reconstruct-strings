@@ -25,16 +25,16 @@ reduction algorithm that:
 ## Algorithm Workflow
 
 The following sequence diagram illustrates the core assembly pipeline. After
-validating inputs, `assemble` filters contained fragments, then enters a recursive
-reduction loop that greedily merges the best overlapping pair and re-filters the
-pool until no further merges are possible. The surviving fragments are converted to
-contigs and sorted into canonical order.
+validating inputs, `assemble` filters contained fragments, then enters a
+recursive reduction loop that greedily merges the best overlapping pair and
+re-filters the pool until no further merges are possible. The surviving
+fragments are converted to contigs and sorted into canonical order.
 
 ```mermaid
 sequenceDiagram
     participant C as Client
     participant A as assemble
-    participant FCR as filterContainedReads
+    participant FCR as filterContainedFragments
     participant RP as reducePool
     participant FBO as findBestOverlap
     participant MP as mergePair
@@ -44,7 +44,7 @@ sequenceDiagram
     alt minOverlap < 1 or empty fragments
         A-->>C: Left AssemblyError
     else valid input
-        A->>FCR: filterContainedReads inputReads
+        A->>FCR: filterContainedFragments inputFragments
         FCR-->>A: initialPool
         A->>RP: reducePool initialPool minOverlap
         loop until pool size <= 1 or no overlaps
@@ -52,8 +52,8 @@ sequenceDiagram
             alt best candidate found
                 FBO-->>RP: Just candidate
                 RP->>MP: mergePair prefix suffix length
-                MP-->>RP: mergedRead
-                RP->>FCR: filterContainedReads (mergedRead : remaining)
+                MP-->>RP: merged
+                RP->>FCR: filterContainedFragments (merged : remaining)
                 FCR-->>RP: updatedPool
             else no candidate found
                 FBO-->>RP: Nothing
@@ -86,12 +86,13 @@ ATGGCGTGCA
 
 - `-m`, `--min-overlap INT`: Minimum overlap threshold (default: `2`).
 - `-f`, `--file FILE`: Read fragments from a file (one fragment per line).
-- `FRAGMENT...`: Read fragments passed as positional arguments or piped via `stdin`.
+- `FRAGMENT...`: Read fragments passed as positional arguments or piped via
+  `stdin`.
 
 ### Generating Synthetic Fragments
 
-You can generate synthetic fragments (strands) from a contiguous text file using the
-included shell script:
+You can generate synthetic fragments (strands) from a contiguous text file
+using the included shell script:
 
 ```bash
 ./scripts/make-strands.sh --input reference.txt --min 10 --max 50 --count 100 \
@@ -188,7 +189,8 @@ alphabet (`A-Z`):
 
 - **$k = 2$**:
   - `ATGC`: $(\frac{1}{4})^2 = \frac{1}{16}$ = 6.25%
-  - `A-Z`: $(\frac{1}{26})^2 = \frac{1}{676}$ ~ 0.148% ($\approx 42\times$ rarer)
+  - `A-Z`: $(\frac{1}{26})^2 = \frac{1}{676}$ ~ 0.148%
+    ($\approx 42\times$ rarer)
 - **$k = 3$**:
   - `ATGC`: $(\frac{1}{4})^3 = \frac{1}{64}$ ~ 1.56%
   - `A-Z`: $(\frac{1}{26})^3$ ~ 0.0057% ($\approx 274\times$ rarer)
@@ -271,8 +273,8 @@ The following calibrated configurations illustrate parameter selection for a
 target sequence of length $G = 1{,}000$ units and $N = 1{,}000$ fragments:
 
 - **Genomic fragments (`ATGC`, $|\Sigma| = 4$)**:
-  Incidental overlap collisions scale as $(\frac{1}{4})^k$, requiring higher overlap
-  thresholds and longer fragments to prevent false joins.
+  Incidental overlap collisions scale as $(\frac{1}{4})^k$, requiring
+  higher overlap thresholds and longer fragments to prevent false joins.
   - Fragment length range: $20 \text{--} 40$ bp (mean $\bar{L} = 30$ bp).
   - Minimum overlap: $m = 10$ bases
     ($m_{\min} = \lceil 2 \log_4 1000 \rceil = 10$,
@@ -282,8 +284,11 @@ target sequence of length $G = 1{,}000$ units and $N = 1{,}000$ fragments:
   - Sample commands:
 
     ```bash
+    # prepare 1000 fragments from a reference genome of 1000 bp
+    # with length between 20 and 40 bp
     ./scripts/make-strands.sh \
-      -i reference_genome.txt -m 20 -M 40 -n 1000 > fragments.txt
+        -i reference_genome.txt -m 20 -M 40 -n 1000 > fragments.txt
+    # reconstruct the fragments with minimum overlap of 10 bp
     cabal run reconstruct-strings -- -m 10 -f fragments.txt
     ```
 
@@ -299,11 +304,15 @@ target sequence of length $G = 1{,}000$ units and $N = 1{,}000$ fragments:
   - Sample commands:
 
     ```bash
-    ./scripts/make-strands.sh -i reference_text.txt -m 10 -M 20 -n 1000 > strands.txt
+    # prepare 1000 fragments from a reference text of 1000 characters
+    # with length between 10 and 20 characters
+    ./scripts/make-strands.sh \
+        -i reference_text.txt -m 10 -M 20 -n 1000 > strands.txt
+    # reconstruct the fragments with a minimum overlap of 5 characters
     cabal run reconstruct-strings -- -m 5 -f strands.txt
     ```
 
-- **Comparative summary**:
+- **Comparative Summary**:
   - Alphabet size: $4$ (`ATGC`) versus $26$ (`A-Z`).
   - Overlap threshold: $m = 10$ bases versus $m = 5$ characters ($E < 1$).
   - Fragment length: $20 \text{--}40$ bp versus $10 \text{--}20$ characters.
@@ -313,8 +322,9 @@ target sequence of length $G = 1{,}000$ units and $N = 1{,}000$ fragments:
 ## Continuous Integration
 
 GitHub Actions pipeline configuration is defined in
-[`.github/workflows/haskell.yml`][github-actions], which automatically compiles,
-tests, and validates documentation builds on pushes and pull requests.
+[`.github/workflows/haskell.yml`][github-actions], which automatically
+validates Cabal metadata, builds the project, runs tests, and executes sample
+reconstruction commands on pushes and pull requests.
 
 ## References
 

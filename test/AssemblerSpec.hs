@@ -11,11 +11,11 @@
 -- tie-breaking rules, containment filtering, and canonical ordering.
 module AssemblerSpec (spec) where
 
-import           Assembler       (assemble, calculateOverlap,
+import           Assembler       (assemble, calculateOverlap, compareCandidates,
                                   filterContainedFragments, isProperSubstringOf,
-                                  mergePair)
+                                  mergePair, selectBetter)
 import           Assembler.Types (AssemblyError (..), Contig (..),
-                                  Fragment (..))
+                                  Fragment (..), OverlapCandidate (..))
 import qualified Data.Text       as T
 import           Test.Hspec      (Spec, describe, it, shouldBe)
 import           Test.QuickCheck (Arbitrary (..), elements, listOf, property)
@@ -38,6 +38,28 @@ spec = do
   describe "mergePair" $
     it "concatenates prefix fragment with remaining suffix" $
       mergePair (Fragment "ATGGC") (Fragment "GGCGT") 3 `shouldBe` Fragment "ATGGCGT"
+
+  describe "selectBetter" $ do
+    it "prefers the candidate with the longer match length" $
+      let left  = OverlapCandidate (Fragment "AAA") (Fragment "BBB") 2
+          right = OverlapCandidate (Fragment "CCC") (Fragment "DDD") 3
+       in selectBetter left right `shouldBe` right
+
+    it "breaks ties using the smallest prefix fragment" $
+      let left  = OverlapCandidate (Fragment "ABC") (Fragment "XYZ") 3
+          right = OverlapCandidate (Fragment "ABD") (Fragment "UVW") 3
+       in selectBetter left right `shouldBe` left
+
+  describe "compareCandidates" $ do
+    it "orders longer overlaps before shorter overlaps" $
+      let left  = OverlapCandidate (Fragment "AAA") (Fragment "BBB") 2
+          right = OverlapCandidate (Fragment "CCC") (Fragment "DDD") 3
+       in compareCandidates left right `shouldBe` LT
+
+    it "prefers the lexicographically smaller prefix when lengths are equal" $
+      let left  = OverlapCandidate (Fragment "ABC") (Fragment "XYZ") 3
+          right = OverlapCandidate (Fragment "ABD") (Fragment "UVW") 3
+       in compareCandidates left right `shouldBe` GT
 
   describe "filterContainedFragments" $ do
     it "deduplicates identical fragments" $
