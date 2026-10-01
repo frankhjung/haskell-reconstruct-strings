@@ -69,11 +69,17 @@ newtype Contig = Contig { unContig :: Text }
 type OverlapLength = Int
 
 data OverlapCandidate = OverlapCandidate
-  { prefixFragment  :: !Fragment
-  , suffixFragment  :: !Fragment
-  , matchLength :: !OverlapLength
+  { prefixFragment :: !Fragment
+  , suffixFragment :: !Fragment
+  , matchLength    :: !OverlapLength
   }
-  deriving stock (Eq, Ord, Show)
+  deriving stock (Eq, Show)
+
+instance Ord OverlapCandidate where
+  compare a b =
+    compare (matchLength a) (matchLength b)
+      <> compare (prefixFragment b) (prefixFragment a)
+      <> compare (suffixFragment b) (suffixFragment a)
 
 data AssemblyError
   = InvalidMinOverlap !Int

@@ -11,9 +11,9 @@
 -- tie-breaking rules, containment filtering, and canonical ordering.
 module AssemblerSpec (spec) where
 
-import           Assembler.Internal (assemble, calculateOverlap, compareCandidates,
+import           Assembler.Internal (assemble, calculateOverlap,
                                      filterContainedFragments, isProperSubstringOf,
-                                     mergePair, selectBetter)
+                                     mergePair)
 import           Assembler.Types (AssemblyError (..), Contig (..),
                                   Fragment (..), OverlapCandidate (..))
 import qualified Data.Text       as T
@@ -22,6 +22,9 @@ import           Test.QuickCheck (Arbitrary (..), elements, listOf, property)
 
 instance Arbitrary Fragment where
   arbitrary = Fragment . T.pack <$> listOf (elements "ACGT")
+
+instance Arbitrary OverlapCandidate where
+  arbitrary = OverlapCandidate <$> arbitrary <*> arbitrary <*> arbitrary
 
 spec :: Spec
 spec = do
@@ -39,27 +42,54 @@ spec = do
     it "concatenates prefix fragment with remaining suffix" $
       mergePair (Fragment "ATGGC") (Fragment "GGCGT") 3 `shouldBe` Fragment "ATGGCGT"
 
-  describe "selectBetter" $ do
-    it "prefers the candidate with the longer match length" $
+  describe "Ord OverlapCandidate" $ do
+    it "prefers the candidate with the longer match length in max" $
       let left  = OverlapCandidate (Fragment "AAA") (Fragment "BBB") 2
           right = OverlapCandidate (Fragment "CCC") (Fragment "DDD") 3
-       in selectBetter left right `shouldBe` right
+       in max left right `shouldBe` right
 
-    it "breaks ties using the smallest prefix fragment" $
+    it "breaks ties using the smaller prefix fragment in max" $
       let left  = OverlapCandidate (Fragment "ABC") (Fragment "XYZ") 3
           right = OverlapCandidate (Fragment "ABD") (Fragment "UVW") 3
-       in selectBetter left right `shouldBe` left
+       in max left right `shouldBe` left
 
-  describe "compareCandidates" $ do
-    it "orders longer overlaps before shorter overlaps" $
+    it "breaks secondary ties using the smaller suffix fragment in max" $
+      let left  = OverlapCandidate (Fragment "ABC") (Fragment "UVW") 3
+          right = OverlapCandidate (Fragment "ABC") (Fragment "XYZ") 3
+       in max left right `shouldBe` left
+
+    it "orders longer overlaps as greater than shorter overlaps" $
       let left  = OverlapCandidate (Fragment "AAA") (Fragment "BBB") 2
           right = OverlapCandidate (Fragment "CCC") (Fragment "DDD") 3
-       in compareCandidates left right `shouldBe` LT
+       in compare left right `shouldBe` LT
 
-    it "prefers the lexicographically smaller prefix when lengths are equal" $
+    it "orders smaller prefix as greater when lengths are equal" $
       let left  = OverlapCandidate (Fragment "ABC") (Fragment "XYZ") 3
           right = OverlapCandidate (Fragment "ABD") (Fragment "UVW") 3
-       in compareCandidates left right `shouldBe` GT
+       in compare left right `shouldBe` GT
+
+    it "orders smaller suffix as greater when length and prefix are equal" $
+      let left  = OverlapCandidate (Fragment "ABC") (Fragment "UVW") 3
+          right = OverlapCandidate (Fragment "ABC") (Fragment "XYZ") 3
+       in compare left right `shouldBe` GT
+
+    it "satisfies reflexivity: c <= c" $
+      property $ \c -> c <= (c :: OverlapCandidate)
+
+    it "satisfies antisymmetry: a <= b && b <= a ==> a == b" $
+      property $ \a b ->
+        not (a <= b && b <= (a :: OverlapCandidate)) || a == b
+
+    it "satisfies transitivity: a <= b && b <= c ==> a <= c" $
+      property $ \a b c ->
+        not (a <= b && b <= (c :: OverlapCandidate)) || a <= c
+
+    it "satisfies totality: a <= b || b <= a" $
+      property $ \a b -> a <= b || b <= (a :: OverlapCandidate)
+
+    it "is consistent with Eq: compare a b == EQ <=> a == b" $
+      property $ \a b ->
+        (compare (a :: OverlapCandidate) b == EQ) == (a == b)
 
   describe "filterContainedFragments" $ do
     it "deduplicates identical fragments" $

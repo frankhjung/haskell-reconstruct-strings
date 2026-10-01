@@ -14,8 +14,6 @@ module Assembler.Internal
   , calculateOverlap
   , mergePair
   , findBestOverlap
-  , selectBetter
-  , compareCandidates
   , filterContainedFragments
   , sortCanonical
   , isProperSubstringOf
@@ -26,7 +24,7 @@ import           Assembler.Types           (AssemblyError (..), Contig (..),
                                             OverlapCandidate (..),
                                             OverlapLength)
 import           Data.Containers.ListUtils (nubOrd)
-import           Data.List                 (foldl', sortBy)
+import           Data.List                 (sortBy)
 import qualified Data.Text                 as T
 
 -- | Reconstruct contigs from a collection of fragments given a minimum overlap.
@@ -93,41 +91,9 @@ mergePair :: Fragment -> Fragment -> OverlapLength -> Fragment
 mergePair (Fragment prefix) (Fragment suffix) overlapLen =
   Fragment (prefix <> T.drop overlapLen suffix)
 
--- | Select the preferred overlap candidate according to the assembly ordering.
---
--- The current candidate wins unless the next candidate is strictly better under
--- the deterministic ordering defined by 'compareCandidates'.
---
--- >>> let left = OverlapCandidate (Fragment "AAA") (Fragment "BBB") 2
--- >>> let right = OverlapCandidate (Fragment "CCC") (Fragment "DDD") 3
--- >>> selectBetter left right
--- OverlapCandidate {prefixFragment = Fragment {unFragment = "CCC"}, suffixFragment = Fragment {unFragment = "DDD"}, matchLength = 3}
-selectBetter :: OverlapCandidate -> OverlapCandidate -> OverlapCandidate
-selectBetter curr nextCandidate =
-  case compareCandidates curr nextCandidate of
-    LT -> nextCandidate
-    _  -> curr
-
--- | Compare two overlap candidates using the assembly selection rules.
---
--- Ordering is determined by:
--- 1. longer overlap match length first
--- 2. lexicographically smaller prefix fragment first
--- 3. lexicographically smaller suffix fragment first
---
--- >>> let left = OverlapCandidate (Fragment "ABC") (Fragment "XYZ") 3
--- >>> let right = OverlapCandidate (Fragment "ABD") (Fragment "UVW") 3
--- >>> compareCandidates left right
--- GT
-compareCandidates :: OverlapCandidate -> OverlapCandidate -> Ordering
-compareCandidates a b =
-  compare (matchLength a) (matchLength b)
-    <> compare (prefixFragment b) (prefixFragment a)
-    <> compare (suffixFragment b) (suffixFragment a)
-
 -- | Find the single best overlap candidate across all ordered fragment pairs.
 --
--- Implements strict three-tier deterministic tie-breaking:
+-- Implements strict three-tier deterministic tie-breaking via 'Ord':
 -- 1. Longest overlap match length (descending)
 -- 2. Lexicographically smaller prefix fragment (ascending)
 -- 3. Lexicographically smaller suffix fragment (ascending)
@@ -150,8 +116,7 @@ findBestOverlap pool minOverlap =
         ]
   in case candidates of
        [] -> Nothing
-       (firstCandidate : rest) ->
-         Just (foldl' selectBetter firstCandidate rest)
+       cs -> Just (maximum cs)
 
 -- | Eliminate exact duplicates and any fragments fully contained as proper
 -- substrings inside longer fragments.

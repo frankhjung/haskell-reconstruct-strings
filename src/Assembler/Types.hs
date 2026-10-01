@@ -42,7 +42,17 @@ data OverlapCandidate = OverlapCandidate
   , matchLength    :: !OverlapLength
     -- ^ Length of the matching suffix-prefix overlap.
   }
-  deriving stock (Eq, Ord, Show)
+  deriving stock (Eq, Show)
+
+-- | Strict three-tier deterministic total ordering:
+-- 1. Longest overlap match length (descending)
+-- 2. Lexicographically smaller prefix fragment (ascending)
+-- 3. Lexicographically smaller suffix fragment (ascending)
+instance Ord OverlapCandidate where
+  compare a b =
+    compare (matchLength a) (matchLength b)
+      <> compare (prefixFragment b) (prefixFragment a)
+      <> compare (suffixFragment b) (suffixFragment a)
 
 -- | Domain errors returned when precondition validation fails.
 data AssemblyError
