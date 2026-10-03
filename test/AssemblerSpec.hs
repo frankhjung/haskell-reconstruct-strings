@@ -40,9 +40,27 @@ spec = do
     it "disallows total containment overlap where match == max length" $
       calculateOverlap (Fragment "ABC") (Fragment "ABC") 2 `shouldBe` 0
 
-  describe "mergePair" $
+    it "never returns an overlap exceeding the shortest fragment length" $
+      property $ \a b k ->
+        let lenA = T.length (unFragment a)
+            lenB = T.length (unFragment b)
+            k' = max 1 k
+         in calculateOverlap a b k' <= min lenA lenB
+
+
+
+  describe "mergePair" $ do
     it "concatenates prefix fragment with remaining suffix" $
       mergePair (Fragment "ATGGC") (Fragment "GGCGT") 3 `shouldBe` Fragment "ATGGCGT"
+
+    it "produces merged fragment of expected length" $
+      property $ \a b overlap ->
+        let lenA = T.length (unFragment a)
+            lenB = T.length (unFragment b)
+            -- overlap must be <= min (lenA, lenB) to be valid
+            overlap' = max 0 (min (min lenA lenB) overlap)
+            merged = mergePair a b overlap'
+         in T.length (unFragment merged) == lenA + lenB - overlap'
 
   describe "Ord OverlapCandidate" $ do
     it "prefers the candidate with the longer match length in max" $
@@ -111,6 +129,9 @@ spec = do
 
     it "returns False when a fragment is not a substring" $
       isProperSubstringOf (Fragment "CGC") (Fragment "ACGTA") `shouldBe` False
+
+    it "is irreflexive (a fragment is not a proper substring of itself)" $
+      property $ \a -> not (isProperSubstringOf a a)
 
   describe "assemble" $ do
     it "assembles single valid overlap (Example A)" $ do
