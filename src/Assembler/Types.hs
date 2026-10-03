@@ -12,7 +12,6 @@ module Assembler.Types
   ( Fragment (..)
   , Contig (..)
   , OverlapLength
-  , OverlapCandidate (..)
   , AssemblyError (..)
   ) where
 
@@ -33,26 +32,7 @@ newtype Contig = Contig
 -- | Number of characters sharing an exact suffix-prefix match.
 type OverlapLength = Int
 
--- | An ordered candidate pair of fragments with a verified overlap match.
-data OverlapCandidate = OverlapCandidate
-  { prefixFragment :: !Fragment
-    -- ^ The fragment contributing the matching suffix.
-  , suffixFragment :: !Fragment
-    -- ^ The fragment contributing the matching prefix.
-  , matchLength    :: !OverlapLength
-    -- ^ Length of the matching suffix-prefix overlap.
-  }
-  deriving stock (Eq, Show)
 
--- | Strict three-tier deterministic total ordering:
--- 1. Longest overlap match length (descending)
--- 2. Lexicographically smaller prefix fragment (ascending)
--- 3. Lexicographically smaller suffix fragment (ascending)
-instance Ord OverlapCandidate where
-  compare a b =
-    compare (matchLength a) (matchLength b)
-      <> compare (prefixFragment b) (prefixFragment a)
-      <> compare (suffixFragment b) (suffixFragment a)
 
 -- | Domain errors returned when precondition validation fails.
 data AssemblyError

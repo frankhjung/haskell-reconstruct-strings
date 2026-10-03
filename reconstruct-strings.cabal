@@ -48,7 +48,6 @@ library
   exposed-modules:
     Assembler
     Assembler.CLI
-    Assembler.Internal
     Assembler.Types
 
   build-depends:
