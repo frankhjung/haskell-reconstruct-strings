@@ -1,14 +1,20 @@
 # Reconstruct Strings
 
-A pure, total Haskell implementation of a greedy overlap sequence assembler
-designed to reconstruct contiguous sequences (*contigs*) from short overlapping
-string fragments or DNA sequencing fragments.
+This project is a learning exercise intended to understand how to assemble
+strings from overlapping fragments, using the Overlap-Layout-Consensus (OLC)
+paradigm.
+
+It implements a pure, total Haskell implementation of a greedy overlap sequence
+assembler designed to reconstruct contiguous sequences (*contigs*) from short
+overlapping string fragments or DNA sequencing reads.
+
+[![How Algorithms Rebuild Shattered DNA](https://i9.ytimg.com/vi_webp/z2dpAw3IzmE/sd1.webp?sqp=CNTBh9YG-oaymwEoCIAFEOAD8quKqQMcGADwAQH4Ac4FgAKACooCDAgAEAEYZSBaKFcwDw==&rs=AOn4CLDX1TrsDOvllPfGKvnzfiGt1HFV3g)](https://youtu.be/z2dpAw3IzmE?si=hfSzDUGu-2-OcCqB)
 
 ## Overview
 
-Reconstructing a DNA sequence from short fragments—a foundational step in
-*de novo* genome assembly—can be approximated through the Overlap-Layout-
-Consensus (OLC) paradigm.
+Reconstructing a DNA sequence from short fragments—a foundational step in *de
+novo* genome assembly—can be approximated through the Overlap-Layout- Consensus
+(OLC) paradigm.
 
 This project implements a deterministic, pure functional greedy overlap
 reduction algorithm that:
@@ -22,55 +28,29 @@ reduction algorithm that:
 - Terminates when no pairwise overlap satisfies the minimum threshold.
 - Sorts final contigs into a canonical, permutation-invariant order.
 
-## Algorithm Workflow
+## Quick Start
 
-The following sequence diagram illustrates the core assembly pipeline. After
-validating inputs, `assemble` filters contained fragments, then enters a
-recursive reduction loop that greedily merges the best overlapping pair and
-re-filters the pool until no further merges are possible. The surviving
-fragments are converted to contigs and sorted into canonical order.
+### Prerequisites
 
-```mermaid
-sequenceDiagram
-    participant C as Client
-    participant A as assemble
-    participant FCR as filterContainedFragments
-    participant RP as reducePool
-    participant FBO as findBestOverlap
-    participant MP as mergePair
-    participant SC as sortCanonical
+- [GHC][ghc-url] (>= 9.6 recommended)
+- [Cabal][cabal-url] (>= 3.0)
+- Optional: `make` for task automation
 
-    C->>A: assemble fragments minOverlap
-    alt minOverlap < 1 or empty fragments
-        A-->>C: Left AssemblyError
-    else valid input
-        A->>FCR: filterContainedFragments inputFragments
-        FCR-->>A: initialPool
-        A->>RP: reducePool initialPool minOverlap
-        loop until pool size <= 1 or no overlaps
-            RP->>FBO: findBestOverlap pool minOverlap
-            alt best candidate found
-                FBO-->>RP: Just candidate
-                RP->>MP: mergePair prefix suffix length
-                MP-->>RP: merged
-                RP->>FCR: filterContainedFragments (merged : remaining)
-                FCR-->>RP: updatedPool
-            else no candidate found
-                FBO-->>RP: Nothing
-            end
-        end
-        RP-->>A: finalPool
-        A->>SC: sortCanonical contigs
-        SC-->>A: sortedContigs
-        A-->>C: Right sortedContigs
-    end
+### Build and Test
+
+```bash
+# Build library and executable
+cabal build
+# Or: make build
+
+# Run unit and property tests
+cabal test
+# Or: make test
 ```
 
-## Usage
+### Running the Assembler
 
-### Command-Line Execution
-
-Run the assembler directly using Cabal:
+Reconstruct a sequence from fragments supplied via standard input:
 
 ```bash
 printf "ATGGC\nGGCGT\nCGTGCA\n" | cabal run reconstruct-strings -- -m 2
@@ -82,39 +62,37 @@ Output:
 ATGGCGTGCA
 ```
 
-### Options
+## Usage
+
+### Command-Line Options
 
 - `-m`, `--min-overlap INT`: Minimum overlap threshold (default: `2`).
-- `-f`, `--file FILE`: Read fragments from a file (one fragment per line).
-  If omitted, fragments are read from standard input (`stdin`).
+- `-f`, `--file FILE`: Path to input file (one fragment per line). If omitted,
+  fragments are read from standard input (`stdin`).
 
 ### Generating Synthetic Fragments
 
-You can generate synthetic fragments (strands) from a contiguous text file
-using the included shell script:
+Generate synthetic fragments (strands) from a text file using the included shell
+script:
 
 ```bash
-./scripts/make-strands.sh --input reference.txt --min 10 --max 50 --count 100 \
-      > fragments.txt
+./scripts/make-strands.sh -i sample.txt -m 10 -M 50 -n 100 > fragments.txt
 ```
 
 ### End-to-End Simulation Pipeline
 
-You can verify assembly accuracy against known reference data using a synthetic
-generation and reassembly pipeline:
+Verify assembly accuracy against a known reference sequence:
 
-1. Create synthetic reference data:
+1. Create a synthetic reference sequence:
 
    ```bash
-   cat /dev/urandom | tr -dc 'ATGC' | fold -w 64 | head -n 10 \
-      > sample.txt
+   cat /dev/urandom | tr -dc 'ATGC' | fold -w 64 | head -n 10 > sample.txt
    ```
 
-2. Fragment the reference sequence into fragments:
+2. Fragment the reference sequence into overlapping strands:
 
    ```bash
-   ./scripts/make-strands.sh -i sample.txt -m 8 -M 60 -n 1000 \
-      > strands.txt
+   ./scripts/make-strands.sh -i sample.txt -m 8 -M 60 -n 1000 > strands.txt
    ```
 
 3. Reassemble the fragmented strands:
@@ -124,232 +102,97 @@ generation and reassembly pipeline:
       | fold -w 64 > reconstructed.txt
    ```
 
-4. Compare expected versus assembled sequences:
+4. Compare reference sequence with assembled output:
 
    ```bash
    sdiff -s sample.txt reconstructed.txt
    ```
 
+## Documentation Index
+
+Detailed documentation is organised in [`docs/`][docs-dir]:
+
+- [Domain Glossary][glossary]: Definitions of domain terminology including
+  fragments, contigs, overlaps, and coverage.
+- [Parameter Heuristics Guide][heuristics]: Mathematical collision
+  probabilities, overlap lower/upper bounds, and parameter tuning guidelines.
+- [Biological Background][dna-doc]: Context on *de novo* DNA sequence assembly
+  comparing OLC and de Bruijn graph paradigms.
+- [Assembler Specification (REQ-001)][req-001]: Formal functional requirements,
+  pipeline sequence diagram, and architectural decision records.
+- [Strand Generator Specification (REQ-002)][req-002]: Functional requirements
+  and design records for the synthetic fragment generator.
+- [Animation Guide][animation-doc]: Visual storyboard for step-by-step
+  algorithmic animation and diagram generation.
+
 ## Build and Development
 
-The project uses [Cabal][cabal-url] and a `Makefile` task runner.
-
-### Common Make Targets
+Development automation targets are defined in the [`Makefile`][makefile]:
 
 - `make` (or `make default`): Formats, lints, builds, and runs the test suite.
-- `make all`: Runs the full pipeline including documentation and sample
-  execution.
-- `make format`: Formats source files with `stylish-haskell` and Cabal files
-  with `cabal-fmt`.
-- `make check`: Generates ctags and runs static analysis with `hlint` and
-  `cabal check`.
-- `make build`: Compiles the library, executable, and test suite with Cabal.
-- `make test`: Executes unit tests and property tests.
+- `make all`: Runs the full pipeline including documentation and sample runs.
+- `make format`: Formats source files (`stylish-haskell`) and Cabal file
+  (`cabal-fmt`).
+- `make check`: Runs static analysis (`hlint`, `cabal check`) and generates
+  ctags.
+- `make build`: Compiles the library, executable, and test suite.
+- `make test`: Executes unit tests and QuickCheck property tests.
 - `make doc`: Generates Haddock documentation with hyperlinked source code.
 - `make exec`: Executes sample sequence assembly runs.
-- `make clean`: Cleans build artifacts and tags.
+- `make ghci`: Opens an interactive GHCi session via `cabal repl`.
+- `make clean`: Removes build artifacts and tags.
+- `make cleanall`: Purges all build artifacts including the Cabal cache.
+- `make setup`: Initialises Cabal user config and updates package dependencies.
 
 ## Project Structure
 
 - [`reconstruct-strings.cabal`][cabal-file]: Package configuration declaring
-  build dependencies, compiler flags, and components.
-- [`Makefile`][makefile]: Development automation targets for formatting,
-  linting, building, testing, and documentation generation.
-- [`src/Assembler.hs`][src-assembler]: Public API exporting the main assembly
-  contract.
-- [`src/Assembler/CLI.hs`][src-assembler-cli]: Pure transformation pipeline and
-  error formatting for the CLI.
-- [`src/Assembler/Internal.hs`][src-assembler-internal]: Core greedy reduction
-  logic and containment filtering.
+  dependencies, compiler flags, and build components.
+- [`Makefile`][makefile]: Development automation targets.
+- [`src/Assembler.hs`][src-assembler]: Public API and core functional greedy
+  reduction engine.
+- [`src/Assembler/CLI.hs`][src-assembler-cli]: Pure transformation pipeline,
+  text sanitisation, and CLI error formatting.
 - [`src/Assembler/Types.hs`][src-assembler-types]: Domain newtypes (`Fragment`,
-  `Contig`), candidate records, and error types.
-- [`app/Main.hs`][app-main]: Command-line interface with option parsing and
-  stream I/O.
-- [`test/Spec.hs`][test-spec]: Test driver with `hspec-discover`.
-- [`test/AssemblerSpec.hs`][test-assembler-spec]: Hspec and QuickCheck test
-  suite.
-- [`docs/reconstructing-complete-dna-strand-from-short-fragments.md`][dna-doc]:
-  Background information on DNA sequencing and assembly.
-- [`docs/REQ-001-functional-greedy-overlap-assembler.md`][req-001]: Formal
-  functional specification and architectural decision records (ADRs).
-- [`docs/REQ-002-shell-script-to-make-strands.md`][req-002]: Requirements and
-  ADRs for the synthetic strand generator script.
-- [`docs/GLOSSARY.md`][glossary]: Domain terminology and definitions.
-
-## Assembly Dynamics and Parameter Heuristics
-
-Assembler performance depends on the interaction between alphabet size,
-fragment length, minimum overlap threshold, and sequencing coverage.
-
-### Alphabet Size and Collision Probability
-
-The probability of an incidental prefix-suffix match of length $k$ between two
-independent random sequences over an alphabet $\Sigma$ scales exponentially:
-
-$$P(\text{overlap} \ge k) = \left(\frac{1}{|\Sigma|}\right)^k$$
-
-Comparing a 4-character nucleotide alphabet (`ATGC`) with a 26-character
-alphabet (`A-Z`):
-
-- **$k = 2$**:
-  - `ATGC`: $(\frac{1}{4})^2 = \frac{1}{16}$ = 6.25%
-  - `A-Z`: $(\frac{1}{26})^2 = \frac{1}{676}$ ~ 0.148%
-    ($\approx 42\times$ rarer)
-- **$k = 3$**:
-  - `ATGC`: $(\frac{1}{4})^3 = \frac{1}{64}$ ~ 1.56%
-  - `A-Z`: $(\frac{1}{26})^3$ ~ 0.0057% ($\approx 274\times$ rarer)
-- **$k = 4$**:
-  - `ATGC`: $(\frac{1}{4})^4 = \frac{1}{256}$ ~ 0.391%
-  - `A-Z`: $(\frac{1}{26})^4$ ~ 0.000219% ($\approx 1{,}785 \times$ rarer)
-
-### Impact on Assembly Behaviour
-
-- **Unrelated Random Noise**: When assembling random fragments without a shared
-  reference sequence, `ATGC` collapses fragments into spurious contigs due to
-  frequent coincidental matches. Conversely, `A-Z` fragments rarely share
-  accidental overlaps, causing the greedy reduction in [`Assembler.Internal.hs`]
-  [src-assembler-internal] to halt immediately without merges. The apparent
-  assembly of small alphabets is an illusion caused by chimeric joins.
-- **Sensitivity to Coverage Gaps**: Over `A-Z`, 4-mers are statistically
-  unique ($1$ in $456{,}976$). If physical coverage has a gap where adjacent
-  fragments overlap by less than $m$, the assembler halts and outputs fragmented
-  contigs. In `ATGC`, chance 4-mer matches across distant regions can falsely
-  bridge coverage gaps, resulting in scrambled assemblies.
-- **Repeat Ambiguity**: In `ATGC`, short sequences rapidly exhaust unique
-  permutations ($4^4 = 256$), causing repeated $k$-mers that trap greedy
-  heuristics in local optima. In `A-Z`, high information entropy virtually
-  eliminates repeats in moderate-length sequences.
-
-### Minimum Overlap Lower Bound
-
-For a pool of $N$ fragments, there are $N(N - 1)$ ordered pairwise comparisons
-in [`findBestOverlap`][src-assembler-internal]. To ensure the expected
-number of false-positive pairwise matches across the dataset is less than 1:
-
-$$E[\text{spurious pairs}] \approx N^2 \cdot |\Sigma|^{-m} < 1$$
-
-$$\implies m_{\text{min}} = \lceil 2 \log_{|\Sigma|} N \rceil$$
-
-- For $N = 1{,}000$ in `ATGC`: $m_{\text{min}} = \lceil 2 \log_4 1000 \rceil
-  = 10$ bases.
-- For $N = 1{,}000$ in `A-Z`: $m_{\text{min}} = \lceil 2 \log_{26} 1000
-  \rceil = 5$ characters.
-
-### Minimum Overlap Upper Bound
-
-Under the Lander–Waterman model of sequencing, adjacent fragments in the
-reference must overlap by at least $m$ to be detected. Given average fragment
-length $\bar{L}$, the effective coverage $C_{\text{eff}}$ is:
-
-$$C_{\text{eff}} = C \cdot \left(1 - \frac{m}{\bar{L}}\right)$$
-
-where $C = \frac{N \cdot \bar{L}}{G}$ is nominal physical coverage for a target
-of length $G$. As $m \to \bar{L}$, $C_{\text{eff}} \to 0$, causing exponential
-fragmentation into separate contigs.
-
-- **Rule of thumb**: Keep $m \le 0.5 \cdot \bar{L}$ to preserve at least 50% of
-  nominal coverage.
-
-### Fragment Length Requirements
-
-- **Repeat Resolution**: To resolve repetitive elements, fragment length must
-  strictly exceed the longest repeat length: $L > R_{\max}$.
-- **Length Distribution**: Using variable fragment lengths (e.g. `--min` and
-  `--max` in [`make-strands.sh`][make-strands]) breaks tie-breaking edge cases
-  during greedy selection.
-
-### Parameter Selection Guidelines
-
-- **Minimum Overlap ($m$)**:
-  - Set $m = \max\left(\lceil 2 \log_{|\Sigma|} N \rceil, \; 0.3 \cdot
-    \bar{L}\right)$.
-  - Typical range: 30% to 50% of average fragment length $\bar{L}$.
-- **Fragment Length ($L$)**:
-  - Ensure $L > R_{\max}$ (longer than the longest repeat).
-  - Typical range: $2 \times$ to $3 \times$ the overlap threshold $m$.
-- **Coverage Depth ($C$)**:
-  - Target $C_{\text{eff}} = C(1 - \frac{m}{\bar{L}}) \ge 10$.
-  - Nominal physical coverage: $15 \times$ to $30 \times$.
-
-### Worked Configuration Examples
-
-The following calibrated configurations illustrate parameter selection for a
-target sequence of length $G = 1{,}000$ units and $N = 1{,}000$ fragments:
-
-- **Genomic fragments (`ATGC`, $|\Sigma| = 4$)**:
-  Incidental overlap collisions scale as $(\frac{1}{4})^k$, requiring
-  higher overlap thresholds and longer fragments to prevent false joins.
-  - Fragment length range: $20 \text{--} 40$ bp (mean $\bar{L} = 30$ bp).
-  - Minimum overlap: $m = 10$ bases
-    ($m_{\min} = \lceil 2 \log_4 1000 \rceil = 10$,
-    $E[\text{spurious}] \approx 0.95 < 1$).
-  - Coverage: nominal $C = 30 \times$, effective
-    $C_{\text{eff}} = 30(1 - \frac{10}{30}) = 20 \times \ge 10 \times$.
-  - Sample commands:
-
-    ```bash
-    # prepare 1000 fragments from a reference genome of 1000 bp
-    # with length between 20 and 40 bp
-    ./scripts/make-strands.sh \
-        -i reference_genome.txt -m 20 -M 40 -n 1000 > fragments.txt
-    # reconstruct the fragments with minimum overlap of 10 bp
-    cabal run reconstruct-strings -- -m 10 -f fragments.txt
-    ```
-
-- **String character fragments (`A-Z`, $|\Sigma| = 26$)**:
-  Higher entropy ($(\frac{1}{26})^k$) drastically reduces collision probability,
-  permitting smaller thresholds and shorter fragments without chimera formation.
-  - Fragment length range: $10 \text{--}20$ chars (mean $\bar{L} = 15$ chars).
-  - Minimum overlap: $m = 5$ characters
-    ($m_{\min} = \lceil 2 \log_{26} 1000 \rceil = 5$,
-    $E[\text{spurious}] \approx 0.084 \ll 1$).
-  - Coverage: nominal $C = 15 \times$, effective
-    $C_{\text{eff}} = 15(1 - \frac{5}{15}) = 10 \times \ge 10 \times$.
-  - Sample commands:
-
-    ```bash
-    # prepare 1000 fragments from a reference text of 1000 characters
-    # with length between 10 and 20 characters
-    ./scripts/make-strands.sh \
-        -i reference_text.txt -m 10 -M 20 -n 1000 > strands.txt
-    # reconstruct the fragments with a minimum overlap of 5 characters
-    cabal run reconstruct-strings -- -m 5 -f strands.txt
-    ```
-
-- **Comparative Summary**:
-  - Alphabet size: $4$ (`ATGC`) versus $26$ (`A-Z`).
-  - Overlap threshold: $m = 10$ bases versus $m = 5$ characters ($E < 1$).
-  - Fragment length: $20 \text{--}40$ bp versus $10 \text{--}20$ characters.
-  - Nominal coverage: $30 \times$ versus $15 \times$ physical depth.
-  - Effective coverage: $20 \times$ versus $10 \times$ Lander–Waterman depth.
+  `Contig`), overlap types, and error sum types.
+- [`app/Main.hs`][app-main]: Executable entry point with command-line option
+  parsing and stream I/O.
+- [`test/Spec.hs`][test-spec]: Test driver discovered by `hspec-discover`.
+- [`test/AssemblerSpec.hs`][test-assembler-spec]: Hspec unit tests and
+  QuickCheck property tests.
+- [`scripts/make-strands.sh`][make-strands]: Shell utility for generating random
+  synthetic fragments.
+- [`docs/`][docs-dir]: Project specifications, guides, and background theory.
 
 ## Continuous Integration
 
-GitHub Actions pipeline configuration is defined in
-[`.github/workflows/haskell.yml`][github-actions], which automatically
-validates Cabal metadata, builds the project, runs tests, and executes sample
-reconstruction commands on pushes and pull requests.
+GitHub Actions workflow configuration is defined in
+[`.github/workflows/haskell.yml`][github-actions], which automatically validates
+Cabal metadata, builds the project, runs tests, and executes sample
+reconstructions on pushes and pull requests.
 
-## References
+## License
 
-- [REQ-001 Functional Greedy Overlap Assembler Specification][req-001]
-- [REQ-002 Create Text Strands][req-002]
-- [Reconstructing DNA from Short Fragments][dna-doc]
-- [Domain Glossary][glossary]
+This project is licensed under the BSD-3-Clause license. See
+[`LICENSE`][license] for details.
 
+[animation-doc]: docs/animation.md
 [app-main]: app/Main.hs
 [cabal-file]: reconstruct-strings.cabal
 [cabal-url]: https://www.haskell.org/cabal/
 [dna-doc]: docs/reconstructing-complete-dna-strand-from-short-fragments.md
+[docs-dir]: docs/
+[ghc-url]: https://www.haskell.org/ghc/
 [github-actions]: .github/workflows/haskell.yml
 [glossary]: docs/GLOSSARY.md
+[heuristics]: docs/heuristics.md
+[license]: LICENSE
 [make-strands]: scripts/make-strands.sh
 [makefile]: Makefile
 [req-001]: docs/REQ-001-functional-greedy-overlap-assembler.md
 [req-002]: docs/REQ-002-shell-script-to-make-strands.md
+[src-assembler-cli]: src/Assembler/CLI.hs
 [src-assembler-types]: src/Assembler/Types.hs
 [src-assembler]: src/Assembler.hs
-[src-assembler-cli]: src/Assembler/CLI.hs
-[src-assembler-internal]: src/Assembler/Internal.hs
 [test-assembler-spec]: test/AssemblerSpec.hs
 [test-spec]: test/Spec.hs
