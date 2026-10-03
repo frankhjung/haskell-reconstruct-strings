@@ -1,4 +1,6 @@
-# Create Text Strands
+# Synthetic Strand Generator Specification (REQ-002)
+
+[← Back to Documentation Index](README.md)
 
 ## Objective
 
@@ -48,3 +50,9 @@ newlines before processing to ensure the text is perfectly contiguous.
 - **Rationale:** Guarantees that extracted strands do not contain newlines,
   which would otherwise break the "one line per strand" output format
   requirement.
+
+## See Also
+
+- [Documentation Index](README.md)
+- [Assembly Dynamics and Parameter Heuristics](heuristics.md)
+- [Assembler Specification (REQ-001)](REQ-001-functional-greedy-overlap-assembler.md)

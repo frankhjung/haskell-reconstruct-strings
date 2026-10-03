@@ -19,9 +19,13 @@ license:            BSD-3-Clause
 license-file:       LICENSE
 category:           Bioinformatics
 extra-source-files:
+  docs/animation.md
   docs/GLOSSARY.md
+  docs/heuristics.md
+  docs/README.md
   docs/reconstructing-complete-dna-strand-from-short-fragments.md
   docs/REQ-001-functional-greedy-overlap-assembler.md
+  docs/REQ-002-shell-script-to-make-strands.md
   README.md
 
 common shared-properties

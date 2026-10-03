@@ -1,5 +1,7 @@
 # Functional Greedy Overlap Assembler Specification
 
+[← Back to Documentation Index](README.md)
+
 ## 1. Overview and Problem Statement
 
 The assembler accepts an unordered collection of fragments and constructs one or
@@ -54,7 +56,6 @@ module Assembler.Types
   ( Fragment(..)
   , Contig(..)
   , OverlapLength
-  , OverlapCandidate(..)
   , AssemblyError(..)
   ) where
 
@@ -200,9 +201,10 @@ pool:
 filterContainedFragments :: [Fragment] -> [Fragment]
 filterContainedFragments fragments =
   let uniqueFragments = nub fragments
-  in [ r | r <- uniqueReads
+  in [ r | r <- uniqueFragments
          , not (any (\o -> r /= o &&
-                           unFragment r `T.isInfixOf` unFragment o) uniqueReads) ]
+                           unFragment r `T.isInfixOf`
+                           unFragment o) uniqueFragments) ]
 ```
 
 ## 5. Required Assembly Behaviour
@@ -223,7 +225,51 @@ It must guarantee:
 - dynamic elimination of fragments engulfed by newly formed contigs,
 - and canonical, permutation-invariant ordering of the final contigs.
 
-### 5.2 Reference Reduction Algorithm
+### 5.2 Sequence Diagram
+
+The following sequence diagram illustrates the core assembly pipeline. After
+validating inputs, `assemble` filters contained fragments, then enters a
+recursive reduction loop that greedily merges the best overlapping pair and
+re-filters the pool until no further merges are possible. The surviving
+fragments are converted to contigs and sorted into canonical order.
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant A as assemble
+    participant FCR as filterContainedFragments
+    participant RP as reducePool
+    participant FBO as findBestOverlap
+    participant MP as mergePair
+    participant SC as sortCanonical
+
+    C->>A: assemble fragments minOverlap
+    alt minOverlap < 1 or empty fragments
+        A-->>C: Left AssemblyError
+    else valid input
+        A->>FCR: filterContainedFragments inputFragments
+        FCR-->>A: initialPool
+        A->>RP: reducePool initialPool minOverlap
+        loop until pool size <= 1 or no overlaps
+            RP->>FBO: findBestOverlap pool minOverlap
+            alt best candidate found
+                FBO-->>RP: Just candidate
+                RP->>MP: mergePair prefix suffix length
+                MP-->>RP: merged
+                RP->>FCR: filterContainedFragments (merged : remaining)
+                FCR-->>RP: updatedPool
+            else no candidate found
+                FBO-->>RP: Nothing
+            end
+        end
+        RP-->>A: finalPool
+        A->>SC: sortCanonical contigs
+        SC-->>A: sortedContigs
+        A-->>C: Right sortedContigs
+    end
+```
+
+### 5.3 Reference Reduction Algorithm
 
 ```haskell
 assemble :: [Fragment] -> Int -> Either AssemblyError [Contig]
@@ -253,7 +299,7 @@ reducePool pool minOverlap
           in reducePool updatedPool minOverlap
 ```
 
-### 5.3 Dynamic Containment and Invariants
+### 5.4 Dynamic Containment and Invariants
 
 - The pool is strictly immutable; every step returns a newly allocated list.
 - Each merge step decreases the pool size by at least 1 (more if the merge
@@ -262,7 +308,7 @@ reducePool pool minOverlap
 - `updatedPool` re-evaluates containment to eliminate any fragment engulfed
   within the newly merged contig.
 
-### 5.4 Canonical Output Ordering
+### 5.5 Canonical Output Ordering
 
 Because input fragments constitute an unordered multiset, the output contig list
 must be independent of input list permutations. Final contigs are sorted
@@ -324,7 +370,7 @@ merges.
 
 For `N` fragments of average length `L`:
 
-- Pairwise overlap evaluation takes $O(N^2 \cdot L)$$.
+- Pairwise overlap evaluation takes $O(N^2 \cdot L)$.
 - At most $N - 1$ reduction stages occur.
 - Worst-case runtime of naive reduction is $O(N^3 \cdot L)$.
 
@@ -461,7 +507,7 @@ settled during requirements review:
 
 ### ADR-5: Total Error Handling and Strong Newtypes
 
-- **Context:** The implementation is targetted to Haskell. Partial functions and
+- **Context:** The implementation is targeted to Haskell. Partial functions and
   stringly-typed representations introduce runtime panics and domain confusion.
 - **Decision:** Use strict `Data.Text` wrapped in dedicated `Fragment` and
   `Contig` newtypes. Return `Either AssemblyError [Contig]` to handle invalid
