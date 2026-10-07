@@ -6,7 +6,8 @@ paradigm.
 
 It implements a pure, total Haskell implementation of a greedy overlap sequence
 assembler designed to reconstruct contiguous sequences (*contigs*) from short
-overlapping string fragments or DNA sequencing reads.
+overlapping string fragments or DNA sequencing reads. An [interactive web
+implementation][web-app] is also available to visualise the algorithm.
 
 [![How Algorithms Rebuild Shattered DNA](https://i9.ytimg.com/vi_webp/z2dpAw3IzmE/sd1.webp?sqp=CNTBh9YG-oaymwEoCIAFEOAD8quKqQMcGADwAQH4Ac4FgAKACooCDAgAEAEYZSBaKFcwDw==&rs=AOn4CLDX1TrsDOvllPfGKvnzfiGt1HFV3g)](https://youtu.be/z2dpAw3IzmE?si=hfSzDUGu-2-OcCqB)
 
@@ -108,6 +109,14 @@ Verify assembly accuracy against a known reference sequence:
    sdiff -s sample.txt reconstructed.txt
    ```
 
+## Interactive Web Implementation
+
+An interactive web implementation (using TypeScript) is available in the
+[reconstruct-strings-web][web-repo] repository.
+
+It publishes an interactive implementation of the Overlap-Layout-Consensus
+(OLC) paradigm, which can be run online at [GitHub Pages][web-app].
+
 ## Documentation Index
 
 Detailed documentation is organised in [`docs/`][docs-dir]:
@@ -196,3 +205,5 @@ This project is licensed under the BSD-3-Clause license. See
 [src-assembler]: src/Assembler.hs
 [test-assembler-spec]: test/AssemblerSpec.hs
 [test-spec]: test/Spec.hs
+[web-app]: https://frankhjung.github.io/typescript-reconstruct-strings-web/
+[web-repo]: https://github.com/frankhjung/typescript-reconstruct-strings-web
