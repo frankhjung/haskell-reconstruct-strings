@@ -23,9 +23,12 @@ import           System.IO           (stderr)
 -- | Command-line configuration parameters.
 data Options = Options
   { optMinOverlap :: !Int
+    -- ^ Minimum suffix-prefix overlap threshold.
   , optInputFile  :: !(Maybe FilePath)
+    -- ^ Optional input file; standard input is used when absent.
   }
 
+-- | Parser for command-line 'Options'.
 optionsParser :: Parser Options
 optionsParser =
   Options
@@ -51,9 +54,7 @@ optionsParser =
 main :: IO ()
 main = do
   opts <- execParser optsInfo
-  rawLines <- maybe (T.lines <$> TIO.getContents) -- default read from stdin
-                    (fmap T.lines . TIO.readFile) -- from a file
-                    (optInputFile opts)           -- maybe a file name
+  rawLines <- T.lines <$> maybe TIO.getContents TIO.readFile (optInputFile opts)
   either reportError
          (mapM_ TIO.putStrLn)
          (runPipeline (optMinOverlap opts) rawLines)

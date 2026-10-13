@@ -18,9 +18,21 @@ parsing:
 - `-m, --min INT`: Minimum length of a strand.
 - `-M, --max INT`: Maximum length of a strand.
 - `-n, --count INT`: Number of strands to produce.
+- `-h, --help`: Display usage and exit.
 
 The text file must contain a contiguous block of text. The script strips all
 newlines before processing to ensure the text is perfectly contiguous.
+
+### Validation Rules
+
+- All of `--input`, `--min`, `--max` and `--count` are required.
+- The input file must exist and be readable.
+- `--min`, `--max` and `--count` must be positive integers.
+- `--min` must not exceed `--max`.
+- If the input text is shorter than `--min`, the script fails.
+- If a sampled strand length exceeds the text length, it is truncated to the
+  text length.
+- Errors are written to standard error with a non-zero exit status.
 
 ## Outputs
 

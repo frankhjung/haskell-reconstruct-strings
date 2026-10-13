@@ -16,7 +16,7 @@ module Assembler
 import           Assembler.Types           (AssemblyError (..), Contig (..),
                                             Fragment (..), OverlapLength)
 import           Data.Containers.ListUtils (nubOrd)
-import           Data.List                 (sortBy)
+import           Data.List                 (find, sortBy)
 import qualified Data.Text                 as T
 
 -- | An ordered candidate pair of fragments with a verified overlap match.
@@ -48,7 +48,7 @@ instance Ord OverlapCandidate where
 --
 -- >>> assemble [Fragment "ABC", Fragment "BCD", Fragment "CDE"] 2
 -- Right [Contig {unContig = "ABCDE"}]
-assemble :: [Fragment] -> Int -> Either AssemblyError [Contig]
+assemble :: [Fragment] -> OverlapLength -> Either AssemblyError [Contig]
 assemble inputFragments minOverlap
   | minOverlap < 1 = Left (InvalidMinOverlap minOverlap)
   | any (T.null . unFragment) inputFragments = Left EmptyFragmentEncountered
@@ -60,38 +60,35 @@ assemble inputFragments minOverlap
 
 -- | Recursively reduce the candidate pool by greedily merging the best
 -- overlap pair and eliminating dynamically contained fragments.
-reducePool :: [Fragment] -> Int -> [Fragment]
-reducePool [] _ = []
-reducePool [sole] _ = [sole]
+--
+-- A pool of fewer than two fragments has no candidate pairs, so
+-- 'findBestOverlap' yields 'Nothing' and the pool is returned unchanged.
+reducePool :: [Fragment] -> OverlapLength -> [Fragment]
 reducePool pool minOverlap =
-      case findBestOverlap pool minOverlap of
-        Nothing -> pool
-        Just candidate ->
-          let merged      = mergePair (prefixFragment candidate)
-                                      (suffixFragment candidate)
-                                      (matchLength candidate)
-              remaining   = [ f | f <- pool
-                                , f /= prefixFragment candidate
-                                , f /= suffixFragment candidate ]
-              updatedPool = filterContainedFragments (merged : remaining)
-          in reducePool updatedPool minOverlap
+  case findBestOverlap pool minOverlap of
+    Nothing -> pool
+    Just candidate ->
+      let merged    = mergePair (prefixFragment candidate)
+                                (suffixFragment candidate)
+                                (matchLength candidate)
+          remaining = filter (`notElem` [ prefixFragment candidate
+                                        , suffixFragment candidate ])
+                             pool
+      in reducePool (filterContainedFragments (merged : remaining)) minOverlap
 
 -- | Calculate the longest suffix-prefix overlap between two distinct fragments.
 --
--- Returns 0 if no match meeting or exceeding @minOverlap@ is found, or if
--- the match length equals or exceeds the length of the longer fragment.
-calculateOverlap :: Fragment -> Fragment -> Int -> OverlapLength
+-- Returns 'Nothing' if no match of at least @minOverlap@ characters exists.
+--
+-- Callers must pass distinct fragments drawn from a pool free of duplicates
+-- and containment (see 'filterContainedFragments'), so a match spanning a
+-- whole fragment cannot occur and no extra length check is needed.
+calculateOverlap :: Fragment -> Fragment -> OverlapLength -> Maybe OverlapLength
 calculateOverlap (Fragment prefix) (Fragment suffix) minOverlap =
-  let maxPossible = min (T.length prefix) (T.length suffix)
-      candidates  =
-        [ len
-        | len <- [maxPossible, maxPossible - 1 .. minOverlap] -- lengths descending
-        , T.takeEnd len prefix == T.take len suffix -- test end of prefix with start of suffix
-        , len < max (T.length prefix) (T.length suffix) -- proper overlap; not identical
-        ]
-  in case candidates of
-       (best : _) -> best
-       []         -> 0
+  find isMatch [maxPossible, maxPossible - 1 .. minOverlap] -- descending
+  where
+    maxPossible = min (T.length prefix) (T.length suffix)
+    isMatch len = T.takeEnd len prefix == T.take len suffix
 
 -- | Merge two fragments along an overlapping boundary.
 mergePair :: Fragment -> Fragment -> OverlapLength -> Fragment
@@ -104,23 +101,19 @@ mergePair (Fragment prefix) (Fragment suffix) overlapLen =
 -- 1. Longest overlap match length (descending)
 -- 2. Lexicographically smaller prefix fragment (ascending)
 -- 3. Lexicographically smaller suffix fragment (ascending)
-findBestOverlap :: [Fragment] -> Int -> Maybe OverlapCandidate
+findBestOverlap :: [Fragment] -> OverlapLength -> Maybe OverlapCandidate
 findBestOverlap pool minOverlap =
-  let candidates =
-        [ OverlapCandidate
-            { prefixFragment  = prefix
-            , suffixFragment  = suffix
-            , matchLength = len
-            }
-        | prefix <- pool
-        , suffix <- pool
-        , prefix /= suffix
-        , let len = calculateOverlap prefix suffix minOverlap
-        , len >= minOverlap
-        ]
-  in case candidates of
-       [] -> Nothing
-       cs -> Just (maximum cs)
+  case candidates of
+    [] -> Nothing
+    cs -> Just (maximum cs)
+  where
+    candidates =
+      [ OverlapCandidate prefix suffix len
+      | prefix <- pool
+      , suffix <- pool
+      , prefix /= suffix
+      , Just len <- [calculateOverlap prefix suffix minOverlap]
+      ]
 
 -- | Eliminate exact duplicates and any fragments fully contained as proper
 -- substrings inside longer fragments.

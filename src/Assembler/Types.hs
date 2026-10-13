@@ -7,7 +7,7 @@
 -- Stability   : experimental
 --
 -- Domain models and error types representing genetic fragments, assembled
--- contigs, overlap candidates, and assembly errors.
+-- contigs, overlap lengths, and assembly errors.
 module Assembler.Types
   ( Fragment (..)
   , Contig (..)
@@ -31,8 +31,6 @@ newtype Contig = Contig
 
 -- | Number of characters sharing an exact suffix-prefix match.
 type OverlapLength = Int
-
-
 
 -- | Domain errors returned when precondition validation fails.
 data AssemblyError

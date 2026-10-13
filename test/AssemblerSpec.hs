@@ -16,12 +16,39 @@ import           Assembler.CLI   (formatAssemblyError, runPipeline,
                                   sanitizeInput)
 import           Assembler.Types (AssemblyError (..), Contig (..),
                                   Fragment (..))
+import           Data.Ord        (Down (..))
 import qualified Data.Text       as T
 import           Test.Hspec      (Spec, describe, it, shouldBe)
-import           Test.QuickCheck (Arbitrary (..), elements, listOf, property)
+import           Test.QuickCheck (Arbitrary (..), Gen, Property, choose,
+                                  counterexample, elements, forAll, listOf1,
+                                  property, resize, shuffle, (===))
 
+-- | Valid fragments are non-empty strings over a small nucleotide alphabet.
+-- A small alphabet makes overlaps and containment likely.
 instance Arbitrary Fragment where
-  arbitrary = Fragment . T.pack <$> listOf (elements "ACGT")
+  arbitrary = Fragment . T.pack <$> listOf1 (elements "ACGT")
+
+-- | Small pools keep the quadratic assembler fast while still producing merges.
+smallPool :: Gen [Fragment]
+smallPool = resize 12 arbitrary
+
+-- | Valid minimum overlap thresholds that exercise merging on short fragments.
+validOverlap :: Gen Int
+validOverlap = choose (1, 4)
+
+-- | Assemble valid input and check a predicate over the resulting contig text.
+-- An unexpected 'AssemblyError' fails the property.
+withContigs :: [Fragment] -> Int -> ([T.Text] -> Bool) -> Property
+withContigs fragments k check =
+  case assemble fragments k of
+    Left err -> counterexample ("unexpected error: " <> show err) False
+    Right cs -> property (check (map unContig cs))
+
+-- | Contigs are ordered by descending length, then ascending text.
+isCanonical :: [T.Text] -> Bool
+isCanonical cs = and (zipWith (<=) keys (drop 1 keys))
+  where
+    keys = [(Down (T.length c), c) | c <- cs]
 
 spec :: Spec
 spec = do
@@ -67,12 +94,37 @@ spec = do
           then assemble [Fragment "ACGT"] k == Left (InvalidMinOverlap k)
           else assemble [Fragment "ACGT"] k == Right [Contig "ACGT"]
 
-    it "is permutation invariant (reverse)" $
-      property $ \rs k ->
-        let k' = max 1 k
-         in assemble (reverse rs) k' == assemble rs k'
+    it "is permutation invariant (shuffled)" $
+      forAll smallPool $ \rs ->
+        forAll (shuffle rs) $ \rs' ->
+          forAll validOverlap $ \k ->
+            assemble rs' k === assemble rs k
 
+    it "rejects any input containing an empty fragment" $
+      forAll smallPool $ \rs ->
+        forAll (choose (0, length rs)) $ \i ->
+          forAll validOverlap $ \k ->
+            let (before, after) = splitAt i rs
+             in assemble (before <> [Fragment ""] <> after) k
+                  === Left EmptyFragmentEncountered
 
+    it "never emits a contig contained within another contig" $
+      forAll smallPool $ \rs ->
+        forAll validOverlap $ \k ->
+          withContigs rs k $ \contigs ->
+            and [ not (a `T.isInfixOf` b)
+                | a <- contigs, b <- contigs, a /= b ]
+
+    it "preserves every input fragment within some contig" $
+      forAll smallPool $ \rs ->
+        forAll validOverlap $ \k ->
+          withContigs rs k $ \contigs ->
+            all (\f -> any (unFragment f `T.isInfixOf`) contigs) rs
+
+    it "emits contigs in canonical order" $
+      forAll smallPool $ \rs ->
+        forAll validOverlap $ \k ->
+          withContigs rs k isCanonical
 
   describe "Assembler.CLI" $ do
     describe "sanitizeInput" $ do

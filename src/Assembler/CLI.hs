@@ -17,7 +17,8 @@ module Assembler.CLI
 
 import           Assembler       (assemble)
 import           Assembler.Types (AssemblyError (..), Contig (..),
-                                  Fragment (..))
+                                  Fragment (..), OverlapLength)
+import           Data.Bifunctor  (bimap)
 import qualified Data.Text       as T
 
 -- | Sanitise raw input lines by trimming surrounding whitespace and discarding
@@ -48,10 +49,9 @@ formatAssemblyError EmptyFragmentEncountered =
 -- Right ["ATGGCGTGCA"]
 -- >>> runPipeline 0 ["ATGGC"]
 -- Left "Error: minimum overlap must be >= 1 (got 0)"
-runPipeline :: Int -> [T.Text] -> Either T.Text [T.Text]
-runPipeline minOverlap rawLines =
-  let cleaned   = sanitizeInput rawLines
-      fragments = map Fragment cleaned
-  in case assemble fragments minOverlap of
-       Left err      -> Left (formatAssemblyError err)
-       Right contigs -> Right (map unContig contigs)
+runPipeline :: OverlapLength -> [T.Text] -> Either T.Text [T.Text]
+runPipeline minOverlap =
+  bimap formatAssemblyError (map unContig)
+    . flip assemble minOverlap
+    . map Fragment
+    . sanitizeInput

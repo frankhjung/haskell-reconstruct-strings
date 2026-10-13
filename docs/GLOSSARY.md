@@ -46,9 +46,9 @@ _Avoid_: Alignment
 
 ## OverlapLength
 
-A non-negative integer representing the number of characters shared in an
-exact suffix-prefix match between two fragments. A value of zero indicates
-no qualifying overlap was found.
+A positive integer representing the number of characters shared in an exact
+suffix-prefix match between two fragments. The absence of a qualifying overlap
+is represented by `Nothing`, not by a zero length.
 
 ## Strand
 

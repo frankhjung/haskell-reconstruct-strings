@@ -49,7 +49,7 @@ Non-goals include:
 ## 3. Data Model
 
 The domain model is defined using Haskell newtypes and sum types over strict
-`Text`:
+`Text`. The public types live in `Assembler.Types`:
 
 ```haskell
 module Assembler.Types
@@ -69,6 +69,16 @@ newtype Contig = Contig { unContig :: Text }
 
 type OverlapLength = Int
 
+data AssemblyError
+  = InvalidMinOverlap !Int
+  | EmptyFragmentEncountered
+  deriving stock (Eq, Show)
+```
+
+The internal candidate type is private to the `Assembler` module (it is not
+exported) and carries the deterministic ordering used for tie-breaking:
+
+```haskell
 data OverlapCandidate = OverlapCandidate
   { prefixFragment :: !Fragment
   , suffixFragment :: !Fragment
@@ -81,11 +91,6 @@ instance Ord OverlapCandidate where
     compare (matchLength a) (matchLength b)
       <> compare (prefixFragment b) (prefixFragment a)
       <> compare (suffixFragment b) (suffixFragment a)
-
-data AssemblyError
-  = InvalidMinOverlap !Int
-  | EmptyFragmentEncountered
-  deriving stock (Eq, Show)
 ```
 
 ### Required Interpretation
@@ -93,12 +98,14 @@ data AssemblyError
 - `Fragment`: An immutable sequence of characters. Must be non-empty.
 - `Contig`: A contiguous sequence produced by merging overlapping fragments, or
   an unmerged singleton fragment.
-- `OverlapLength`: A non-negative integer representing the length of an exact
-  suffix-prefix match.
+- `OverlapLength`: A positive integer representing the length of an exact
+  suffix-prefix match. The absence of an overlap is represented by `Nothing`,
+  not by a zero length.
 - A valid overlap is an exact match where a suffix of `prefixFragment` matches a
-  prefix of `suffixFragment`. The overlap length must be strictly greater than
-  zero, at least `min_overlap`, and strictly less than the length of the longer
-  fragment.
+  prefix of `suffixFragment`. The overlap length must be at least `min_overlap`
+  (which is at least 1) and strictly less than the length of the longer
+  fragment. The latter holds automatically because pools never contain
+  duplicate or contained fragments.
 
 ## 4. Functional Requirements
 
@@ -107,7 +114,7 @@ data AssemblyError
 The entry point `assemble` accepts:
 
 - an input list of `Fragment` values: `[Fragment]`,
-- a minimum overlap threshold: `min_overlap :: Int`.
+- a minimum overlap threshold: `min_overlap :: OverlapLength`.
 
 #### Validation Rules
 
@@ -123,29 +130,29 @@ The entry point `assemble` accepts:
 that:
 
 - `k >= minOverlap`,
-- the suffix of length `k` in `r1` equals the prefix of length `k` in `r2`,
-- and `k < max (length r1) (length r2)`.
+- and the suffix of length `k` in `r1` equals the prefix of length `k` in `r2`.
 
-If no such `k` exists, the function returns `0`.
+If no such `k` exists, the function returns `Nothing`.
 
 #### Required Semantics
 
 - The overlap is directed: `calculateOverlap r1 r2 minOverlap` is not
   necessarily equal to `calculateOverlap r2 r1 minOverlap`.
 - The search proceeds from `min (length r1) (length r2)` down to `minOverlap`.
-- The returned value is the largest valid overlap meeting the criteria, or `0`.
+- The returned value is the largest valid overlap, or `Nothing`.
+- Callers pass distinct fragments from a pool free of duplicates and
+  containment. A match spanning a whole fragment therefore cannot occur, so no
+  separate `k < max (length r1) (length r2)` check is required (see
+  [REQ-003](REQ-003-code-simplification.md)).
 
 ```haskell
-calculateOverlap :: Fragment -> Fragment -> Int -> OverlapLength
+calculateOverlap
+  :: Fragment -> Fragment -> OverlapLength -> Maybe OverlapLength
 calculateOverlap (Fragment r1) (Fragment r2) minOverlap =
-  let maxPossible = min (T.length r1) (T.length r2)
-      candidates =
-        [ len | len <- [maxPossible, maxPossible - 1 .. minOverlap]
-              , T.takeEnd len r1 == T.take len r2
-              , len < max (T.length r1) (T.length r2) ]
-  in case candidates of
-       (best : _) -> best
-       []         -> 0
+  find isMatch [maxPossible, maxPossible - 1 .. minOverlap]
+  where
+    maxPossible = min (T.length r1) (T.length r2)
+    isMatch len = T.takeEnd len r1 == T.take len r2
 ```
 
 ### 4.3 `mergePair`
@@ -164,12 +171,12 @@ No other characters may be inserted, dropped, or modified.
 ### 4.4 `findBestOverlap`
 
 `findBestOverlap pool minOverlap` inspects every ordered pair of distinct
-fragments `(a, b)` from `pool` where `a /= b` and computes
+fragments `(a, b)` from `pool` where `a /= b` and evaluates
 `calculateOverlap a b minOverlap`.
 
 #### Output Contract
 
-- If no valid pair satisfies `overlap >= minOverlap`, return `Nothing`.
+- If no ordered pair yields `Just _`, return `Nothing`.
 - Otherwise, return `Just candidate` where `candidate` is the maximal candidate
   under the deterministic tie-breaking order.
 
@@ -200,11 +207,14 @@ pool:
 ```haskell
 filterContainedFragments :: [Fragment] -> [Fragment]
 filterContainedFragments fragments =
-  let uniqueFragments = nub fragments
-  in [ r | r <- uniqueFragments
-         , not (any (\o -> r /= o &&
-                           unFragment r `T.isInfixOf`
-                           unFragment o) uniqueFragments) ]
+  filter isNotContained uniqueFragments
+  where
+    uniqueFragments = nubOrd fragments
+    isNotContained f = not (any (isProperSubstringOf f) uniqueFragments)
+
+isProperSubstringOf :: Fragment -> Fragment -> Bool
+isProperSubstringOf s1 s2 =
+  s1 /= s2 && unFragment s1 `T.isInfixOf` unFragment s2
 ```
 
 ## 5. Required Assembly Behaviour
@@ -214,7 +224,7 @@ filterContainedFragments fragments =
 The primary assembly function has the following signature:
 
 ```haskell
-assemble :: [Fragment] -> Int -> Either AssemblyError [Contig]
+assemble :: [Fragment] -> OverlapLength -> Either AssemblyError [Contig]
 ```
 
 It must guarantee:
@@ -272,7 +282,7 @@ sequenceDiagram
 ### 5.3 Reference Reduction Algorithm
 
 ```haskell
-assemble :: [Fragment] -> Int -> Either AssemblyError [Contig]
+assemble :: [Fragment] -> OverlapLength -> Either AssemblyError [Contig]
 assemble fragments minOverlap
   | minOverlap < 1 = Left (InvalidMinOverlap minOverlap)
   | any (T.null . unFragment) fragments = Left EmptyFragmentEncountered
@@ -282,21 +292,20 @@ assemble fragments minOverlap
           sortedContigs = sortCanonical (map toContig finalPool)
       in Right sortedContigs
 
-reducePool :: [Fragment] -> Int -> [Fragment]
-reducePool pool minOverlap
-  | length pool <= 1 = pool
-  | otherwise =
-      case findBestOverlap pool minOverlap of
-        Nothing -> pool
-        Just candidate ->
-          let merged = mergePair (prefixFragment candidate)
-                                 (suffixFragment candidate)
-                                 (matchLength candidate)
-              remaining = [ r | r <- pool
-                              , r /= prefixFragment candidate
-                              , r /= suffixFragment candidate ]
-              updatedPool = filterContainedFragments (merged : remaining)
-          in reducePool updatedPool minOverlap
+-- A pool of fewer than two fragments has no candidate pairs, so
+-- 'findBestOverlap' returns 'Nothing' and the pool is returned unchanged.
+reducePool :: [Fragment] -> OverlapLength -> [Fragment]
+reducePool pool minOverlap =
+  case findBestOverlap pool minOverlap of
+    Nothing -> pool
+    Just candidate ->
+      let merged = mergePair (prefixFragment candidate)
+                             (suffixFragment candidate)
+                             (matchLength candidate)
+          remaining = filter (`notElem` [ prefixFragment candidate
+                                        , suffixFragment candidate ])
+                             pool
+      in reducePool (filterContainedFragments (merged : remaining)) minOverlap
 ```
 
 ### 5.4 Dynamic Containment and Invariants
@@ -392,7 +401,7 @@ Throughout all stages, the implementation guarantees:
 
 The implementation is verified if:
 
-1. `assemble` accepts `[Fragment]` and `Int`, returning
+1. `assemble` accepts `[Fragment]` and `OverlapLength`, returning
    `Either AssemblyError [Contig]`.
 2. Invalid overlap thresholds (`< 1`) or empty fragments yield descriptive
    errors.

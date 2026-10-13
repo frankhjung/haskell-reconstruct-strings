@@ -4,18 +4,18 @@ This project is a learning exercise intended to understand how to assemble
 strings from overlapping fragments, using the Overlap-Layout-Consensus (OLC)
 paradigm.
 
-It implements a pure, total Haskell implementation of a greedy overlap sequence
-assembler designed to reconstruct contiguous sequences (*contigs*) from short
+It is a pure, total Haskell implementation of a greedy overlap sequence
+assembler, designed to reconstruct contiguous sequences (*contigs*) from short
 overlapping string fragments or DNA sequencing reads. An [interactive web
 implementation][web-app] is also available to visualise the algorithm.
 
-[![How Algorithms Rebuild Shattered DNA](docs/how-algorithms-rebuild-shattered-dna.png)](https://youtu.be/z2dpAw3IzmE?si=hfSzDUGu-2-OcCqB)
+[![How Algorithms Rebuild Shattered DNA][banner-image]][video-url]
 
 ## Overview
 
-Reconstructing a DNA sequence from short fragments—a foundational step in *de
-novo* genome assembly—can be approximated through the Overlap-Layout- Consensus
-(OLC) paradigm.
+Reconstructing a DNA sequence from short fragments – a foundational step in
+*de novo* genome assembly – can be approximated through the
+Overlap-Layout-Consensus (OLC) paradigm.
 
 This project implements a deterministic, pure functional greedy overlap
 reduction algorithm that:
@@ -29,13 +29,90 @@ reduction algorithm that:
 - Terminates when no pairwise overlap satisfies the minimum threshold.
 - Sorts final contigs into a canonical, permutation-invariant order.
 
+## Architecture
+
+The system enforces a clean separation of concerns between effectful stream
+I/O and pure functional sequence reconstruction.
+
+### Component Diagram
+
+The following diagram illustrates the structural decoupling between the
+executable layer, pure CLI pipeline, core greedy assembly engine, and domain
+models:
+
+```mermaid
+graph TD
+  subgraph Executable["Executable Layer (I/O)"]
+    Main["Main (app/Main.hs)<br/>Command-Line Options & Stream I/O"]
+  end
+
+  subgraph PureLibrary["Pure Functional Library"]
+    CLI["Assembler.CLI<br/>Text Sanitisation & Pipeline"]
+    Core["Assembler<br/>Greedy Overlap Assembly Engine"]
+    Types["Assembler.Types<br/>Domain Types & Error Sum Types"]
+
+    CLI -->|"fragments & minOverlap"| Core
+    Core -->|"assembled contigs or error"| CLI
+    Core -.-> Types
+    CLI -.-> Types
+  end
+
+  Main -->|"raw text lines"| CLI
+  CLI -->|"rendered contigs or errors"| Main
+```
+
+### Sequence Diagram
+
+The assembly workflow proceeds through input sanitisation, precondition
+validation, initial containment filtering, recursive greedy reduction, and
+canonical contig ordering:
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor User as User / Shell
+  participant Main as Main (app/Main.hs)
+  participant CLI as Assembler.CLI
+  participant ASM as Assembler
+  participant RED as reducePool
+
+  User->>Main: run reconstruct-strings -m 2 [-f FILE]
+  Main->>Main: Read input lines (stdin or file)
+  Main->>CLI: runPipeline minOverlap rawLines
+  CLI->>CLI: sanitizeInput (trim whitespace, drop empty)
+  CLI->>ASM: assemble fragments minOverlap
+
+  alt minOverlap < 1 (CLI strips empty lines before assembly)
+    ASM-->>CLI: Left AssemblyError
+    CLI-->>Main: Left "Error: ..."
+    Main-->>User: stderr output & exitFailure
+  else Valid input
+    ASM->>ASM: filterContainedFragments (deduplicate & drop substrings)
+    ASM->>RED: reducePool initialPool minOverlap
+
+    loop Until no candidate overlap >= minOverlap
+      RED->>RED: findBestOverlap (three-tier deterministic Ord)
+      RED->>RED: mergePair (concatenate overlapping boundaries)
+      RED->>RED: filterContainedFragments (purge engulfed fragments)
+    end
+
+    RED-->>ASM: finalPool
+    ASM->>ASM: sortCanonical (descending length, ascending text)
+    ASM-->>CLI: Right [Contig]
+    CLI-->>Main: Right [Text]
+    Main-->>User: stdout contig lines
+  end
+```
+
 ## Quick Start
 
 ### Prerequisites
 
-- [GHC][ghc-url] (>= 9.6 recommended)
+- [GHC][ghc-url] 9.6.7 (as used by CI; the Cabal file requires
+  `base ^>=4.18.3`)
 - [Cabal][cabal-url] (>= 3.0)
-- Optional: `make` for task automation
+- Optional: `make` for task automation, plus `stylish-haskell`, `cabal-fmt`,
+  `hlint` and `hasktags` for `make format` and `make check`
 
 ### Build and Test
 
@@ -131,6 +208,8 @@ Detailed documentation is organised in [`docs/`][docs-dir]:
   pipeline sequence diagram, and architectural decision records.
 - [Strand Generator Specification (REQ-002)][req-002]: Functional requirements
   and design records for the synthetic fragment generator.
+- [Code Simplification Specification (REQ-003)][req-003]: Review-driven
+  simplifications of the assembler, CLI, and build configuration.
 - [Animation Guide][animation-doc]: Visual storyboard for step-by-step
   algorithmic animation and diagram generation.
 
@@ -140,17 +219,19 @@ Development automation targets are defined in the [`Makefile`][makefile]:
 
 - `make` (or `make default`): Formats, lints, builds, and runs the test suite.
 - `make all`: Runs the full pipeline including documentation and sample runs.
+- `make help`: Lists available targets.
 - `make format`: Formats source files (`stylish-haskell`) and Cabal file
   (`cabal-fmt`).
-- `make check`: Runs static analysis (`hlint`, `cabal check`) and generates
-  ctags.
-- `make build`: Compiles the library, executable, and test suite.
-- `make test`: Executes unit tests and QuickCheck property tests.
+- `make check`: Runs static analysis (`make tags` and `make lint`).
+- `make tags`: Generates ctags for Haskell sources (`hasktags`).
+- `make lint`: Runs `hlint` and `cabal check`.
+- `make build`: Compiles the library and executable.
+- `make test`: Builds and executes unit tests and QuickCheck property tests.
 - `make doc`: Generates Haddock documentation with hyperlinked source code.
 - `make exec`: Executes sample sequence assembly runs.
 - `make ghci`: Opens an interactive GHCi session via `cabal repl`.
 - `make clean`: Removes build artifacts and tags.
-- `make cleanall`: Purges all build artifacts including the Cabal cache.
+- `make cleanall`: Also removes the `dist-newstyle` build directory.
 - `make setup`: Initialises Cabal user config and updates package dependencies.
 
 ## Project Structure
@@ -163,7 +244,7 @@ Development automation targets are defined in the [`Makefile`][makefile]:
 - [`src/Assembler/CLI.hs`][src-assembler-cli]: Pure transformation pipeline,
   text sanitisation, and CLI error formatting.
 - [`src/Assembler/Types.hs`][src-assembler-types]: Domain newtypes (`Fragment`,
-  `Contig`), overlap types, and error sum types.
+  `Contig`), the `OverlapLength` alias, and the `AssemblyError` sum type.
 - [`app/Main.hs`][app-main]: Executable entry point with command-line option
   parsing and stream I/O.
 - [`test/Spec.hs`][test-spec]: Test driver discovered by `hspec-discover`.
@@ -172,6 +253,8 @@ Development automation targets are defined in the [`Makefile`][makefile]:
 - [`scripts/make-strands.sh`][make-strands]: Shell utility for generating random
   synthetic fragments.
 - [`docs/`][docs-dir]: Project specifications, guides, and background theory.
+- [`.github/workflows/haskell.yml`][github-actions]: Continuous integration
+  workflow.
 
 ## Continuous Integration
 
@@ -187,6 +270,7 @@ This project is licensed under the BSD-3-Clause license. See
 
 [animation-doc]: docs/animation.md
 [app-main]: app/Main.hs
+[banner-image]: docs/how-algorithms-rebuild-shattered-dna.png
 [cabal-file]: reconstruct-strings.cabal
 [cabal-url]: https://www.haskell.org/cabal/
 [dna-doc]: docs/reconstructing-complete-dna-strand-from-short-fragments.md
@@ -200,10 +284,12 @@ This project is licensed under the BSD-3-Clause license. See
 [makefile]: Makefile
 [req-001]: docs/REQ-001-functional-greedy-overlap-assembler.md
 [req-002]: docs/REQ-002-shell-script-to-make-strands.md
+[req-003]: docs/REQ-003-code-simplification.md
 [src-assembler-cli]: src/Assembler/CLI.hs
 [src-assembler-types]: src/Assembler/Types.hs
 [src-assembler]: src/Assembler.hs
 [test-assembler-spec]: test/AssemblerSpec.hs
 [test-spec]: test/Spec.hs
+[video-url]: https://youtu.be/z2dpAw3IzmE?si=hfSzDUGu-2-OcCqB
 [web-app]: https://frankhjung.github.io/typescript-reconstruct-strings-web/
 [web-repo]: https://github.com/frankhjung/typescript-reconstruct-strings-web

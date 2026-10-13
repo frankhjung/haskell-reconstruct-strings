@@ -17,6 +17,8 @@ and visual storyboards for the **reconstruct-strings** project.
 - [Synthetic Strand Generator Specification (REQ-002)][req-002]: Functional
   requirements, command-line interface, and ADRs for the synthetic strand
   extraction utility.
+- [Code Simplification Specification (REQ-003)][req-003]: Review-driven
+  simplifications of the assembler, CLI, and build configuration.
 
 ### Domain Theory and Parameter Analysis
 
@@ -39,3 +41,4 @@ and visual storyboards for the **reconstruct-strings** project.
 [heuristics]: heuristics.md
 [req-001]: REQ-001-functional-greedy-overlap-assembler.md
 [req-002]: REQ-002-shell-script-to-make-strands.md
+[req-003]: REQ-003-code-simplification.md
