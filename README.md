@@ -9,13 +9,15 @@ assembler, designed to reconstruct contiguous sequences (*contigs*) from short
 overlapping string fragments or DNA sequencing reads. An [interactive web
 implementation][web-app] is also available to visualise the algorithm.
 
+The following video gives a short introduction:
+
 [![How Algorithms Rebuild Shattered DNA][banner-image]][video-url]
 
 ## Overview
 
-Reconstructing a DNA sequence from short fragments – a foundational step in
-*de novo* genome assembly – can be approximated through the
-Overlap-Layout-Consensus (OLC) paradigm.
+Reconstructing a DNA sequence from short fragments – a foundational step in *de
+novo* genome assembly – can be approximated through the Overlap-Layout-Consensus
+(OLC) paradigm.
 
 This project implements a deterministic, pure functional greedy overlap
 reduction algorithm that:
@@ -31,8 +33,8 @@ reduction algorithm that:
 
 ## Architecture
 
-The system enforces a clean separation of concerns between effectful stream
-I/O and pure functional sequence reconstruction.
+The system enforces a clean separation of concerns between effectful stream I/O
+and pure functional sequence reconstruction.
 
 ### Component Diagram
 
@@ -108,8 +110,7 @@ sequenceDiagram
 
 ### Prerequisites
 
-- [GHC][ghc-url] 9.6.7 (as used by CI; the Cabal file requires
-  `base ^>=4.18.3`)
+- [GHC][ghc-url] 9.6.7 (as used by CI; the Cabal file requires `base ^>=4.18.3`)
 - [Cabal][cabal-url] (>= 3.0)
 - Optional: `make` for task automation, plus `stylish-haskell`, `cabal-fmt`,
   `hlint` and `hasktags` for `make format` and `make check`
